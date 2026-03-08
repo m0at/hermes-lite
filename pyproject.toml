@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-lite"
+version = "0.1.0"
+description = "A stripped-down local coding agent CLI with Anthropic-first runtime and optional local model plumbing"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Andy / Hermes Lite" }]
+license = { text = "MIT" }
+dependencies = [
+  "fire",
+  "httpx",
+  "jinja2",
+  "litellm>=1.75.5",
+  "platformdirs",
+  "prompt_toolkit",
+  "pydantic>=2.0",
+  "python-dotenv",
+  "pyyaml",
+  "requests",
+  "rich",
+  "simple-term-menu",
+  "tenacity",
+  "typer",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+local = [
+  "mlx-vlm>=0.3.12",
+  "starlette",
+  "uvicorn",
+]
+
+[project.scripts]
+hermes-lite = "hermes_cli.main:main"
+hermes-lite-agent = "run_agent:main"
+hermes-lite-serve = "local_models.serve:main"
+
+[tool.setuptools]
+py-modules = ["run_agent", "model_tools", "toolsets", "cli", "hermes_constants", "hermes_state"]
+
+[tool.setuptools.packages.find]
+include = ["agent", "hermes_cli", "local_models", "tools"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: marks tests requiring external services",
+]
+addopts = "-m 'not integration'"

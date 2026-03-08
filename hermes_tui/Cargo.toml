@@ -1,0 +1,16 @@
+[package]
+name = "hermes_tui"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "hermes-tui"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+tui-textarea = { version = "0.7", features = ["crossterm"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

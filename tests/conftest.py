@@ -1,0 +1,71 @@
+"""Shared fixtures for the hermes-agent test suite."""
+
+import os
+import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+# Ensure project root is importable
+PROJECT_ROOT = Path(__file__).parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+    from hermes_rs import RustSessionDB
+    HAS_RUST_DB = True
+except ImportError:
+    HAS_RUST_DB = False
+
+
+@pytest.fixture(
+    params=["rust", "python"] if HAS_RUST_DB else ["python"],
+    ids=lambda x: f"db-{x}",
+)
+def session_db(request, tmp_path):
+    """Parametrized SessionDB fixture — runs tests against both backends."""
+    if request.param == "rust":
+        db = RustSessionDB(str(tmp_path / "test.db"))
+        yield db
+        db.close()
+    else:
+        from hermes_state import SessionDB
+        db = SessionDB(db_path=tmp_path / "test.db")
+        yield db
+        db.close()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_hermes_home(tmp_path, monkeypatch):
+    """Redirect HERMES_HOME to a temp dir so tests never write to ~/.hermes/."""
+    fake_home = tmp_path / "hermes_test"
+    fake_home.mkdir()
+    (fake_home / "sessions").mkdir()
+    (fake_home / "memories").mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(fake_home))
+
+
+@pytest.fixture()
+def tmp_dir(tmp_path):
+    """Provide a temporary directory that is cleaned up automatically."""
+    return tmp_path
+
+
+@pytest.fixture()
+def mock_config():
+    """Return a minimal hermes config dict suitable for unit tests."""
+    return {
+        "model": "test/mock-model",
+        "toolsets": ["terminal", "file"],
+        "max_turns": 10,
+        "terminal": {
+            "backend": "local",
+            "cwd": "/tmp",
+            "timeout": 30,
+        },
+        "compression": {"enabled": False},
+        "memory": {"memory_enabled": False, "user_profile_enabled": False},
+        "command_allowlist": [],
+    }

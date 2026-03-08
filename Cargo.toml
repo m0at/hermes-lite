@@ -1,0 +1,3 @@
+[workspace]
+members = ["hermes_rs", "hermes_tui"]
+resolver = "2"

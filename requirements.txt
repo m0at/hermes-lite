@@ -1,0 +1,15 @@
+fire
+httpx
+jinja2
+litellm>=1.75.5
+
+platformdirs
+prompt_toolkit
+pydantic>=2.0
+python-dotenv
+pyyaml
+requests
+rich
+simple-term-menu
+tenacity
+typer
