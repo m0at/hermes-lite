@@ -83,6 +83,11 @@ async fn main() -> io::Result<()> {
             ui::render_separator(frame, layout.separator2);
             ui::render_input_area(&app, frame, layout.input, &textarea);
             ui::render_status_bar(&app, frame, layout.status_bar);
+
+            // Clarify dialog overlay (rendered last so it's on top)
+            if let Some(ref dialog) = app.focused_pane().clarify_dialog {
+                ui::render_clarify_dialog(dialog, frame, area);
+            }
         })?;
 
         // Tick spinner animation
@@ -137,6 +142,12 @@ fn handle_key_event(
     to_agent: &Option<mpsc::Sender<ToAgent>>,
     key: KeyEvent,
 ) {
+    // Clarify dialog captures all input when active
+    if app.focused_pane().clarify_dialog.is_some() {
+        handle_clarify_key(app, to_agent, key);
+        return;
+    }
+
     // Global keybindings first
     match (key.code, key.modifiers) {
         // Ctrl+C: interrupt or exit
@@ -171,7 +182,8 @@ fn handle_key_event(
             return;
         }
         (KeyCode::PageDown, _) => {
-            app.scroll_down(app.history_height.saturating_sub(2));
+            let amount = app.history_height.saturating_sub(2);
+            app.scroll_down(amount);
             if app.scroll_offset == 0 {
                 app.active_pane = ActivePane::Input;
             }
@@ -236,6 +248,98 @@ fn handle_key_event(
     }
 }
 
+fn handle_clarify_key(
+    app: &mut App,
+    to_agent: &Option<mpsc::Sender<ToAgent>>,
+    key: KeyEvent,
+) {
+    match (key.code, key.modifiers) {
+        // Submit response
+        (KeyCode::Enter, KeyModifiers::NONE) => {
+            let response = app.focused_pane().clarify_dialog.as_ref().unwrap().response();
+            let question = app.focused_pane().clarify_dialog.as_ref().unwrap().question.clone();
+
+            // Show what happened in the conversation
+            app.add_system_message(format!("Agent asked: {question}"));
+            if !response.is_empty() {
+                app.add_system_message(format!("You answered: {response}"));
+            }
+
+            // Send response back to agent
+            if let Some(tx) = to_agent {
+                let _ = tx.try_send(ToAgent::ClarifyResponse {
+                    response: response.clone(),
+                });
+            }
+
+            // Dismiss dialog
+            app.focused_pane_mut().clarify_dialog = None;
+        }
+        // Dismiss without answering (Esc)
+        (KeyCode::Esc, _) => {
+            let question = app.focused_pane().clarify_dialog.as_ref().unwrap().question.clone();
+            app.add_system_message(format!("Agent asked: {question}"));
+            app.add_system_message("(dismissed without answering)".into());
+
+            // Send empty response so the agent doesn't block forever
+            if let Some(tx) = to_agent {
+                let _ = tx.try_send(ToAgent::ClarifyResponse {
+                    response: String::new(),
+                });
+            }
+            app.focused_pane_mut().clarify_dialog = None;
+        }
+        // Arrow keys for choice selection
+        (KeyCode::Up, _) => {
+            if let Some(ref mut dialog) = app.focused_pane_mut().clarify_dialog {
+                dialog.select_up();
+            }
+        }
+        (KeyCode::Down, _) => {
+            if let Some(ref mut dialog) = app.focused_pane_mut().clarify_dialog {
+                dialog.select_down();
+            }
+        }
+        // Text editing
+        (KeyCode::Backspace, _) => {
+            if let Some(ref mut dialog) = app.focused_pane_mut().clarify_dialog {
+                dialog.delete_back();
+            }
+        }
+        (KeyCode::Delete, _) => {
+            if let Some(ref mut dialog) = app.focused_pane_mut().clarify_dialog {
+                dialog.delete_forward();
+            }
+        }
+        (KeyCode::Left, _) => {
+            if let Some(ref mut dialog) = app.focused_pane_mut().clarify_dialog {
+                dialog.move_left();
+            }
+        }
+        (KeyCode::Right, _) => {
+            if let Some(ref mut dialog) = app.focused_pane_mut().clarify_dialog {
+                dialog.move_right();
+            }
+        }
+        (KeyCode::Home, _) => {
+            if let Some(ref mut dialog) = app.focused_pane_mut().clarify_dialog {
+                dialog.move_home();
+            }
+        }
+        (KeyCode::End, _) => {
+            if let Some(ref mut dialog) = app.focused_pane_mut().clarify_dialog {
+                dialog.move_end();
+            }
+        }
+        (KeyCode::Char(c), KeyModifiers::NONE | KeyModifiers::SHIFT) => {
+            if let Some(ref mut dialog) = app.focused_pane_mut().clarify_dialog {
+                dialog.insert_char(c);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn handle_slash_command(app: &mut App, cmd: SlashCommand) {
     match cmd {
         SlashCommand::Help => {
@@ -295,7 +399,8 @@ fn handle_slash_command(app: &mut App, cmd: SlashCommand) {
         }
         SlashCommand::Model(name) => {
             if name.is_empty() {
-                app.add_system_message(format!("Current model: {}", app.model));
+                let model_name = app.model.clone();
+                app.add_system_message(format!("Current model: {}", model_name));
             } else {
                 app.model = name.clone();
                 app.set_status(format!("Model: {name}"));
@@ -379,9 +484,9 @@ fn handle_agent_message(app: &mut App, msg: FromAgent) {
                 app.context_length = context_length;
             }
         }
-        FromAgent::ClarifyRequest { question, .. } => {
-            // TODO: show clarify dialog
-            app.add_system_message(format!("Agent asks: {question}"));
+        FromAgent::ClarifyRequest { question, choices, .. } => {
+            app.focused_pane_mut().clarify_dialog =
+                Some(app::ClarifyDialog::new(question, choices));
         }
         FromAgent::ContextCompressed {
             old_tokens,

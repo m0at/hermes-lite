@@ -76,7 +76,9 @@ class TestProviderResolution:
     def test_base_url_is_string(self):
         cli = _make_cli()
         assert isinstance(cli.base_url, str)
-        assert cli.base_url.startswith("http")
+        # base_url may be empty when no provider/API key is configured
+        if cli.base_url:
+            assert cli.base_url.startswith("http")
 
     def test_model_is_string(self):
         cli = _make_cli()

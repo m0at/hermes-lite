@@ -62,6 +62,7 @@ pub enum LoopState {
 #[pyclass(eq, eq_int)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
+    Continue,
     Break,
     Retry,
     Nudge,
@@ -102,7 +103,7 @@ impl Transition {
     }
 
     fn advance(state: LoopState) -> Self {
-        Self::new(state, Action::Break, "")
+        Self::new(state, Action::Continue, "")
     }
 }
 

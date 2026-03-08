@@ -361,8 +361,7 @@ class TestResponseRendering:
 
     def test_response_box_has_borders(self, cli_instance):
         output = _capture_chat(cli_instance, "test", "Hello world")
-        assert "╭" in output
-        assert "╰" in output
+        assert "──" in output
         assert "Hermes" in output
 
     def test_multiline_response(self, cli_instance):

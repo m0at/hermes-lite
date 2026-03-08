@@ -482,7 +482,8 @@ class TestBuildApiKwargs:
         assert kwargs["extra_body"]["provider"]["only"] == ["Anthropic"]
 
     def test_reasoning_config_default(self, agent):
-        """Default reasoning config should be xhigh."""
+        """Default reasoning config should be xhigh on OpenRouter."""
+        agent.base_url = "https://openrouter.ai/api/v1"
         messages = [{"role": "user", "content": "hi"}]
         kwargs = agent._build_api_kwargs(messages)
         reasoning = kwargs["extra_body"]["reasoning"]
@@ -490,6 +491,7 @@ class TestBuildApiKwargs:
         assert reasoning["effort"] == "xhigh"
 
     def test_reasoning_config_custom(self, agent):
+        agent.base_url = "https://openrouter.ai/api/v1"
         agent.reasoning_config = {"enabled": False}
         messages = [{"role": "user", "content": "hi"}]
         kwargs = agent._build_api_kwargs(messages)
@@ -735,17 +737,20 @@ class TestRunConversation:
             content="<think>internal reasoning</think>",
             finish_reason="stop",
         )
-        # Return empty 3 times to exhaust retries
-        agent._chat_completion_mock.side_effect = [
-            empty_resp, empty_resp, empty_resp,
-        ]
+        # Return empty enough times to exhaust the 3 nudge retries.
+        # The Rust SM nudges 3 times then fails, so we need 4 responses total
+        # (3 nudged + the 4th which triggers the Fail action, but the 4th call
+        # never happens because the SM fails after 3 nudge responses).
+        # However, the loop_driver may issue additional API calls due to the
+        # empty-after-think nudge flow, so provide extras to avoid StopIteration.
+        agent._chat_completion_mock.return_value = empty_resp
         with (
             patch.object(agent, "_persist_session"),
             patch.object(agent, "_save_trajectory"),
             patch.object(agent, "_cleanup_task_resources"),
         ):
             result = agent.run_conversation("answer me")
-        # After 3 retries with no real content, should return partial
+        # After retries with no real content, should return partial
         assert result["completed"] is False
         assert result.get("partial") is True
 
@@ -754,7 +759,7 @@ class TestRunConversation:
         self._setup_agent(agent)
         agent.compression_enabled = True
 
-        tc = _mock_tool_call(name="web_search", arguments='{}', call_id="c1")
+        tc = _mock_tool_call(name="terminal", arguments='{}', call_id="c1")
         resp1 = _mock_response(content="", finish_reason="tool_calls", tool_calls=[tc])
         resp2 = _mock_response(content="All done", finish_reason="stop")
         agent._chat_completion_mock.side_effect = [resp1, resp2]
@@ -769,10 +774,10 @@ class TestRunConversation:
         ):
             # _compress_context should return (messages, system_prompt)
             mock_compress.return_value = (
-                [{"role": "user", "content": "search something"}],
+                [{"role": "user", "content": "do something"}],
                 "compressed system prompt",
             )
-            result = agent.run_conversation("search something")
+            result = agent.run_conversation("do something")
         mock_compress.assert_called_once()
         assert result["final_response"] == "All done"
         assert result["completed"] is True
@@ -818,11 +823,13 @@ class TestRetryExhaustion:
             usage=None,
         )
         agent._chat_completion_mock.return_value = bad_resp
+        fast_time = self._make_fast_time_mock()
         with (
             patch.object(agent, "_persist_session"),
             patch.object(agent, "_save_trajectory"),
             patch.object(agent, "_cleanup_task_resources"),
-            patch("run_agent.time", self._make_fast_time_mock()),
+            patch("run_agent.time", fast_time),
+            patch("agent.loop_driver.time", fast_time),
         ):
             result = agent.run_conversation("hello")
         assert result.get("completed") is False, f"Expected completed=False, got: {result}"
@@ -834,11 +841,13 @@ class TestRetryExhaustion:
         """Exhausted retries on API errors must raise, not fall through."""
         self._setup_agent(agent)
         agent._chat_completion_mock.side_effect = RuntimeError("rate limited")
+        fast_time = self._make_fast_time_mock()
         with (
             patch.object(agent, "_persist_session"),
             patch.object(agent, "_save_trajectory"),
             patch.object(agent, "_cleanup_task_resources"),
-            patch("run_agent.time", self._make_fast_time_mock()),
+            patch("run_agent.time", fast_time),
+            patch("agent.loop_driver.time", fast_time),
         ):
             with pytest.raises(RuntimeError, match="rate limited"):
                 agent.run_conversation("hello")

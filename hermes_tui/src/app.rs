@@ -177,6 +177,120 @@ impl SlashCommand {
     }
 }
 
+// ── Clarify dialog state ─────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct ClarifyDialog {
+    pub question: String,
+    pub choices: Vec<String>,
+    pub input: String,
+    pub cursor: usize,
+    /// If choices are present, which one is highlighted (None = freeform input mode)
+    pub selected_choice: Option<usize>,
+}
+
+impl ClarifyDialog {
+    pub fn new(question: String, choices: Vec<String>) -> Self {
+        let selected_choice = if choices.is_empty() { None } else { Some(0) };
+        Self {
+            question,
+            choices,
+            input: String::new(),
+            cursor: 0,
+            selected_choice,
+        }
+    }
+
+    pub fn insert_char(&mut self, c: char) {
+        self.input.insert(self.cursor, c);
+        self.cursor += c.len_utf8();
+        // Switch to freeform mode when typing with choices present
+        self.selected_choice = None;
+    }
+
+    pub fn delete_back(&mut self) {
+        if self.cursor > 0 {
+            let prev = self.input[..self.cursor]
+                .char_indices()
+                .next_back()
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            self.input.drain(prev..self.cursor);
+            self.cursor = prev;
+            self.selected_choice = None;
+        }
+    }
+
+    pub fn delete_forward(&mut self) {
+        if self.cursor < self.input.len() {
+            let next = self.input[self.cursor..]
+                .char_indices()
+                .nth(1)
+                .map(|(i, _)| self.cursor + i)
+                .unwrap_or(self.input.len());
+            self.input.drain(self.cursor..next);
+            self.selected_choice = None;
+        }
+    }
+
+    pub fn move_left(&mut self) {
+        if self.cursor > 0 {
+            self.cursor = self.input[..self.cursor]
+                .char_indices()
+                .next_back()
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+        }
+    }
+
+    pub fn move_right(&mut self) {
+        if self.cursor < self.input.len() {
+            self.cursor = self.input[self.cursor..]
+                .char_indices()
+                .nth(1)
+                .map(|(i, _)| self.cursor + i)
+                .unwrap_or(self.input.len());
+        }
+    }
+
+    pub fn move_home(&mut self) {
+        self.cursor = 0;
+    }
+
+    pub fn move_end(&mut self) {
+        self.cursor = self.input.len();
+    }
+
+    pub fn select_up(&mut self) {
+        if !self.choices.is_empty() {
+            self.selected_choice = Some(match self.selected_choice {
+                Some(i) if i > 0 => i - 1,
+                Some(_) => self.choices.len() - 1,
+                None => self.choices.len() - 1,
+            });
+        }
+    }
+
+    pub fn select_down(&mut self) {
+        if !self.choices.is_empty() {
+            self.selected_choice = Some(match self.selected_choice {
+                Some(i) => (i + 1) % self.choices.len(),
+                None => 0,
+            });
+        }
+    }
+
+    /// Get the response text (selected choice or freeform input).
+    pub fn response(&self) -> String {
+        if let Some(idx) = self.selected_choice {
+            if idx < self.choices.len() {
+                return self.choices[idx].clone();
+            }
+        }
+        self.input.clone()
+    }
+}
+
 // ── Per-agent pane state ─────────────────────────────────────────────────
 
 pub struct AgentPane {
@@ -213,6 +327,9 @@ pub struct AgentPane {
 
     // Has unread output since last focus
     pub unread: bool,
+
+    // Clarify dialog (modal overlay)
+    pub clarify_dialog: Option<ClarifyDialog>,
 }
 
 impl AgentPane {
@@ -237,6 +354,7 @@ impl AgentPane {
             last_spinner_tick: Instant::now(),
             status_message: None,
             unread: false,
+            clarify_dialog: None,
         }
     }
 

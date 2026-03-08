@@ -6,7 +6,7 @@ use ratatui::{
     },
 };
 
-use crate::app::{App, ActivePane, Message, MessagePart, Role, ToolStatus, SPINNER_FRAMES};
+use crate::app::{App, ActivePane, ClarifyDialog, Message, MessagePart, Role, ToolStatus, SPINNER_FRAMES};
 use crate::colors;
 
 // ── Layout ───────────────────────────────────────────────────────────────
@@ -354,6 +354,117 @@ pub fn render_input_area(
 
     // Render textarea widget inside
     frame.render_widget(textarea, inner);
+}
+
+pub fn render_clarify_dialog(dialog: &ClarifyDialog, frame: &mut Frame, area: Rect) {
+    // Center a popup that takes ~60% of screen width, sized to content
+    let popup_width = (area.width * 3 / 5).max(40).min(area.width.saturating_sub(4));
+    // Height: 3 (border+question) + question lines + choices + input + padding
+    let question_lines = dialog.question.lines().count() as u16;
+    let choices_lines = if dialog.choices.is_empty() {
+        0
+    } else {
+        dialog.choices.len() as u16 + 1 // +1 for "Choices:" label
+    };
+    let input_lines = 3u16; // label + input + hint
+    let inner_height = question_lines + choices_lines + input_lines + 1; // +1 gap
+    let popup_height = (inner_height + 2).min(area.height.saturating_sub(2)); // +2 for borders
+
+    let x = area.x + (area.width.saturating_sub(popup_width)) / 2;
+    let y = area.y + (area.height.saturating_sub(popup_height)) / 2;
+    let popup_area = Rect::new(x, y, popup_width, popup_height);
+
+    // Clear the popup area background
+    frame.render_widget(ratatui::widgets::Clear, popup_area);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(colors::AMBER))
+        .title(Span::styled(
+            " Agent Question ",
+            Style::default().fg(colors::GOLD).bold(),
+        ))
+        .title_position(TitlePosition::Top)
+        .title(Span::styled(
+            " Enter to submit · Esc to dismiss ",
+            Style::default().fg(colors::DIM).italic(),
+        ))
+        .title_position(TitlePosition::Bottom)
+        .style(Style::default().bg(Color::Rgb(0x1a, 0x1a, 0x1a)));
+    let inner = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+
+    // Build content lines inside the popup
+    let mut lines: Vec<Line> = Vec::new();
+
+    // Question text
+    for qline in dialog.question.lines() {
+        lines.push(Line::styled(
+            format!(" {qline}"),
+            Style::default().fg(colors::CREAM).bold(),
+        ));
+    }
+    lines.push(Line::default());
+
+    // Choices (if any)
+    if !dialog.choices.is_empty() {
+        lines.push(Line::styled(
+            " Choices (Up/Down to select):",
+            Style::default().fg(colors::DIM).italic(),
+        ));
+        for (i, choice) in dialog.choices.iter().enumerate() {
+            let is_selected = dialog.selected_choice == Some(i);
+            let (prefix, style) = if is_selected {
+                ("  > ", Style::default().fg(colors::GOLD).bold())
+            } else {
+                ("    ", Style::default().fg(colors::CREAM))
+            };
+            lines.push(Line::styled(format!("{prefix}{choice}"), style));
+        }
+        lines.push(Line::default());
+    }
+
+    // Input field
+    let input_label = if dialog.choices.is_empty() {
+        " Your response:"
+    } else {
+        " Or type a response:"
+    };
+    lines.push(Line::styled(
+        input_label,
+        Style::default().fg(colors::DIM).italic(),
+    ));
+
+    // Render input with cursor
+    let input_display = if dialog.selected_choice.is_some() && dialog.input.is_empty() {
+        // Show placeholder when a choice is selected and no text typed
+        Line::styled(
+            " (press Enter to confirm selection)",
+            Style::default().fg(colors::DIM).italic(),
+        )
+    } else {
+        // Show the input text with a cursor indicator
+        let before = &dialog.input[..dialog.cursor];
+        let cursor_char = dialog.input[dialog.cursor..].chars().next().unwrap_or(' ');
+        let after_cursor = if dialog.cursor < dialog.input.len() {
+            let char_len = cursor_char.len_utf8();
+            &dialog.input[dialog.cursor + char_len..]
+        } else {
+            ""
+        };
+        Line::from(vec![
+            Span::styled(format!(" {before}"), Style::default().fg(colors::CREAM)),
+            Span::styled(
+                cursor_char.to_string(),
+                Style::default().fg(Color::Black).bg(colors::CREAM),
+            ),
+            Span::styled(after_cursor.to_string(), Style::default().fg(colors::CREAM)),
+        ])
+    };
+    lines.push(input_display);
+
+    let para = Paragraph::new(lines).wrap(Wrap { trim: false });
+    frame.render_widget(para, inner);
 }
 
 pub fn render_status_bar(app: &App, frame: &mut Frame, area: Rect) {

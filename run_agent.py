@@ -2158,12 +2158,10 @@ class AIAgent:
         litellm.suppress_debug_info = True
         kwargs.pop("extra_body", None)
 
-        # Stream when we have a display and are in quiet mode (normal CLI),
-        # or when running in subprocess mode (always stream for the TUI).
-        # Non-quiet mode already prints its own verbose logs.
-        # Also skip streaming for auxiliary calls (compression summaries etc.)
-        # which pass explicit timeout= that we don't want to disrupt.
-        use_stream = (self._show_display or self._subprocess_mode) and "timeout" not in kwargs
+        # Stream when we have a display or in subprocess mode (TUI).
+        # Auxiliary calls (compression summaries etc.) pass _skip_stream=True.
+        skip = kwargs.pop("_skip_stream", False)
+        use_stream = (self._show_display or self._subprocess_mode) and not skip
         if not use_stream:
             return litellm.completion(**kwargs)
 
@@ -2573,7 +2571,7 @@ class AIAgent:
                     **self._max_tokens_param(5120),
                 }
                 self._apply_qwen_params(api_kwargs)
-                response = self._chat_completion(**api_kwargs, timeout=30.0)
+                response = self._chat_completion(**api_kwargs, timeout=30.0, _skip_stream=True)
 
             # Extract tool calls from the response, handling both API formats
             tool_calls = []
@@ -4826,6 +4824,10 @@ def _run_subprocess_mode():
                         _shutdown_from_watcher[0] = True
                         agent.interrupt()
                         return
+                    else:
+                        # Re-queue messages we don't handle (e.g. UserInput
+                        # that arrived while agent was finishing up)
+                        stdin_reader._queue.put(imsg)
 
             watcher = threading.Thread(target=_watch_interrupts, daemon=True)
             watcher.start()

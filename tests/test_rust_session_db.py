@@ -198,3 +198,54 @@ class TestParity:
         assert py_res["export_s1_msg_count"] == rust_res["export_s1_msg_count"]
         assert py_res["export_all_count"] == rust_res["export_all_count"]
         assert py_res["export_all_cli_count"] == rust_res["export_all_cli_count"]
+
+    def test_get_messages_as_conversation_parity(self, py_db, rust_db):
+        """Verify get_messages_as_conversation produces identical dicts."""
+        for db in (py_db, rust_db):
+            db.create_session(session_id="s1", source="cli")
+            db.append_message("s1", role="user", content="Hello")
+            db.append_message("s1", role="assistant", content="Hi!",
+                              tool_calls=[{"id": "tc1", "type": "function",
+                                           "function": {"name": "search", "arguments": "{}"}}])
+            db.append_message("s1", role="tool", content="result",
+                              tool_call_id="tc1", tool_name="search")
+            # Edge case: empty-string content
+            db.append_message("s1", role="assistant", content="")
+            # Edge case: None content
+            db.append_message("s1", role="assistant", content=None)
+
+        py_conv = py_db.get_messages_as_conversation("s1")
+        rust_conv = rust_db.get_messages_as_conversation("s1")
+
+        assert len(py_conv) == len(rust_conv), (
+            f"Length mismatch: py={len(py_conv)} rust={len(rust_conv)}"
+        )
+        for i, (pm, rm) in enumerate(zip(py_conv, rust_conv)):
+            assert pm["role"] == rm["role"], f"msg[{i}] role mismatch"
+            assert pm["content"] == rm["content"], (
+                f"msg[{i}] content mismatch: py={pm['content']!r} rust={rm['content']!r}"
+            )
+            # Check optional keys present in both or neither
+            for key in ("tool_call_id", "tool_name", "tool_calls"):
+                assert (key in pm) == (key in rm), (
+                    f"msg[{i}] key '{key}' presence mismatch: "
+                    f"py={key in pm} rust={key in rm}"
+                )
+                if key in pm:
+                    assert pm[key] == rm[key], (
+                        f"msg[{i}] {key} value mismatch: py={pm[key]!r} rust={rm[key]!r}"
+                    )
+
+    def test_reopen_session_parity(self, py_db, rust_db):
+        """Verify reopen_session clears ended_at/end_reason in both backends."""
+        for db in (py_db, rust_db):
+            db.create_session(session_id="s1", source="cli")
+            db.end_session("s1", end_reason="done")
+            db.reopen_session("s1")
+
+        py_s = py_db.get_session("s1")
+        rust_s = rust_db.get_session("s1")
+        assert py_s["ended_at"] is None
+        assert rust_s["ended_at"] is None
+        assert py_s["end_reason"] is None
+        assert rust_s["end_reason"] is None

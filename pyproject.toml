@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-asyncio"]
+dev = ["pytest", "pytest-asyncio", "pytest-timeout"]
 local = [
   "mlx-vlm>=0.3.12",
   "starlette",
@@ -50,5 +50,7 @@ include = ["agent", "hermes_cli", "local_models", "tools"]
 testpaths = ["tests"]
 markers = [
   "integration: marks tests requiring external services",
+  "prodpush: production validation tests requiring live API keys",
 ]
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration and not prodpush'"
+asyncio_mode = "auto"
