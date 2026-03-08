@@ -14,14 +14,16 @@ struct PaneLayout {
     input: Option<Rect>,
 }
 
-fn build_pane_layout(area: Rect, is_focused: bool) -> PaneLayout {
+fn build_pane_layout(area: Rect, is_focused: bool, input_lines: usize) -> PaneLayout {
     if is_focused {
+        // +2 for top/bottom border, clamped to [3, 10]
+        let input_height = (input_lines + 2).max(3).min(10) as u16;
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(3),    // history
-                Constraint::Length(1), // spinner line
-                Constraint::Length(3), // input area
+                Constraint::Min(3),              // history
+                Constraint::Length(1),           // spinner line
+                Constraint::Length(input_height), // input area (grows with content)
             ])
             .split(area);
 
@@ -101,7 +103,12 @@ pub fn render_split(
         let inner = block.inner(*pane_area);
         frame.render_widget(block, *pane_area);
 
-        let layout = build_pane_layout(inner, is_focused);
+        let input_lines = if is_focused {
+            textareas.get(i).map_or(1, |ta| ta.lines().len().max(1))
+        } else {
+            1
+        };
+        let layout = build_pane_layout(inner, is_focused, input_lines);
 
         render_pane_inner(pane, frame, &layout, show_thinking);
 
@@ -141,7 +148,8 @@ pub fn render_tabs(
     let focused = app.focused as usize;
     let show_thinking = app.show_thinking;
     if let Some(pane) = app.panes.get_mut(focused) {
-        let layout = build_pane_layout(content_area, true);
+        let input_lines = textareas.get(focused).map_or(1, |ta| ta.lines().len().max(1));
+        let layout = build_pane_layout(content_area, true, input_lines);
 
         render_pane_inner(pane, frame, &layout, show_thinking);
 

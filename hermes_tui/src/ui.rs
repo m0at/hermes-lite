@@ -20,16 +20,19 @@ pub struct LayoutAreas {
     pub status_bar: Rect,
 }
 
-pub fn build_layout(area: Rect) -> LayoutAreas {
+pub fn build_layout(area: Rect, input_lines: usize) -> LayoutAreas {
+    // input_lines = number of text lines in the textarea
+    // +2 for top/bottom border, clamped to [3, 12]
+    let input_height = (input_lines + 2).max(3).min(12) as u16;
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(6),     // history
-            Constraint::Length(1),  // separator
-            Constraint::Length(1),  // spinner/status
-            Constraint::Length(1),  // separator
-            Constraint::Length(5),  // input area
-            Constraint::Length(1),  // status bar
+            Constraint::Min(6),         // history
+            Constraint::Length(1),      // separator
+            Constraint::Length(1),      // spinner/status
+            Constraint::Length(1),      // separator
+            Constraint::Length(input_height), // input area (grows with content)
+            Constraint::Length(1),      // status bar
         ])
         .split(area);
 
@@ -119,13 +122,16 @@ fn render_welcome(width: u16) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     lines.push(Line::default());
 
-    // Compact banner
-    let banner_lines = [
-        "╔═══════════════════════════════════════════════╗",
-        "║      HERMES-LITE  ·  Local Coding Agent      ║",
-        "╚═══════════════════════════════════════════════╝",
-    ];
-    for bl in banner_lines {
+    // Compact banner (ASCII-safe for all renderers)
+    let bar_len = 47usize.min(width as usize - 2);
+    let bar: String = "=".repeat(bar_len);
+    let title = "HERMES-LITE  *  Local Coding Agent";
+    let padded_title = format!("| {:^w$} |", title, w = bar_len - 4);
+    for bl in [
+        format!("+{}+", &bar),
+        padded_title,
+        format!("+{}+", &bar),
+    ] {
         let centered = format!("{:^width$}", bl, width = width as usize);
         lines.push(Line::styled(centered, Style::default().fg(colors::GOLD).bold()));
     }

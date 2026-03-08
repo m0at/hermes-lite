@@ -23,6 +23,7 @@ _CORE_TOOLS = [
     "search_files",
     "todo",
     "clarify",
+    "delegate_task",
 ]
 
 
@@ -45,6 +46,11 @@ TOOLSETS: Dict[str, Dict[str, Any]] = {
     "clarify": {
         "description": "Ask the user a clarifying question through the CLI",
         "tools": ["clarify"],
+        "includes": [],
+    },
+    "delegate": {
+        "description": "Delegate tasks to other agents in the swarm (multi-agent TUI mode)",
+        "tools": ["delegate_task"],
         "includes": [],
     },
     "hermes-lite-cli": {

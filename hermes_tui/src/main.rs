@@ -128,7 +128,8 @@ async fn main() -> io::Result<()> {
             if app.pane_count() <= 1 {
                 // Single-pane: use ui.rs (backward compatible)
                 let area = frame.area();
-                let layout = ui::build_layout(area);
+                let input_lines = textareas.first().map_or(1, |ta| ta.lines().len().max(1));
+                let layout = ui::build_layout(area, input_lines);
 
                 ui::render_history(&mut app, frame, layout.history);
                 ui::render_separator(frame, layout.separator1);
@@ -400,7 +401,7 @@ fn handle_key_event(
 
                 // Check for slash command
                 if let Some(cmd) = SlashCommand::parse(&text) {
-                    let action = handle_slash_command(app, cmd, pane_ios, textareas, spawn_tx, pending_pullbacks);
+                    let action = handle_slash_command(app, cmd, pane_ios, pane_rxs, textareas, spawn_tx, pending_pullbacks);
                     textareas[focused] = make_textarea();
 
                     if let SlashAction::CloseFocused = action {
@@ -612,7 +613,8 @@ enum SlashAction {
 fn handle_slash_command(
     app: &mut App,
     cmd: SlashCommand,
-    pane_ios: &[Option<PaneIO>],
+    pane_ios: &mut Vec<Option<PaneIO>>,
+    pane_rxs: &mut Vec<Option<mpsc::Receiver<FromAgent>>>,
     textareas: &mut Vec<TextArea>,
     spawn_tx: &mpsc::Sender<(u8, Result<(PaneIO, mpsc::Receiver<FromAgent>), String>)>,
     pending_pullbacks: &mut HashMap<u8, u8>,
@@ -680,10 +682,10 @@ fn handle_slash_command(
         // ── Multi-agent commands ────────────────────────────────────────
 
         SlashCommand::Split => {
-            spawn_new_pane(app, textareas, spawn_tx, LayoutMode::Split { direction: Direction::Horizontal });
+            spawn_new_pane(app, textareas, pane_ios, pane_rxs, spawn_tx, LayoutMode::Split { direction: Direction::Horizontal });
         }
         SlashCommand::HSplit => {
-            spawn_new_pane(app, textareas, spawn_tx, LayoutMode::Split { direction: Direction::Vertical });
+            spawn_new_pane(app, textareas, pane_ios, pane_rxs, spawn_tx, LayoutMode::Split { direction: Direction::Vertical });
         }
         SlashCommand::Tabs => {
             app.layout_mode = LayoutMode::Tabs;
@@ -798,12 +800,16 @@ fn handle_slash_command(
 fn spawn_new_pane(
     app: &mut App,
     textareas: &mut Vec<TextArea>,
+    pane_ios: &mut Vec<Option<PaneIO>>,
+    pane_rxs: &mut Vec<Option<mpsc::Receiver<FromAgent>>>,
     spawn_tx: &mpsc::Sender<(u8, Result<(PaneIO, mpsc::Receiver<FromAgent>), String>)>,
     layout: LayoutMode,
 ) {
     let new_id = app.spawn_pane();
     app.layout_mode = layout;
     textareas.push(make_textarea());
+    pane_ios.push(None);   // placeholder until spawn completes
+    pane_rxs.push(None);
 
     app.panes[new_id as usize].set_status("Starting agent subprocess...".into());
 
@@ -1070,12 +1076,22 @@ fn handle_agent_message_for_pane(
             success,
         } => {
             let icon = if success { "✓" } else { "✗" };
+            let from_name = app.panes[pane_idx].name.clone();
             if let Some(source_idx) = pending_delegations.remove(&request_id) {
                 let sidx = source_idx as usize;
                 if sidx < app.panes.len() {
                     app.panes[sidx].add_system_message(
-                        format!("{icon} delegation result: {result}"),
+                        format!("{icon} delegation result from @{from_name}: {result}"),
                     );
+                    // Forward result to source agent subprocess so it can
+                    // continue with the result in its conversation context.
+                    if let Some(Some(ref pio)) = pane_ios.get(sidx) {
+                        let _ = pio.to_agent.try_send(ToAgent::CrossAgentContext {
+                            from_agent: from_name,
+                            summary: format!("[{icon}] {result}"),
+                            full_history: None,
+                        });
+                    }
                 }
             } else {
                 app.panes[pane_idx].add_system_message(

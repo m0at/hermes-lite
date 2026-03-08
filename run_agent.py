@@ -193,6 +193,23 @@ class SubprocessProtocol:
             "timeout_secs": timeout_secs,
         })
 
+    def emit_delegate_task(self, target_agent: str, task: str, context: str, request_id: str) -> None:
+        self._emit({
+            "type": "DelegateTask",
+            "target_agent": target_agent,
+            "task": task,
+            "context": context,
+            "request_id": request_id,
+        })
+
+    def emit_delegation_result(self, request_id: str, result: str, success: bool) -> None:
+        self._emit({
+            "type": "DelegationResult",
+            "request_id": request_id,
+            "result": result,
+            "success": success,
+        })
+
 
 import queue as _queue_mod
 
@@ -2877,12 +2894,10 @@ class AIAgent:
                 print(f"  {_get_cute_tool_message_impl('clarify', function_args, tool_duration, result=function_result)}")
         elif function_name == "delegate_task":
             from tools.delegate_tool import delegate_task as _delegate_task
-            tasks_arg = function_args.get("tasks")
-            if tasks_arg and isinstance(tasks_arg, list):
-                spinner_label = f"⤳ delegating {len(tasks_arg)} tasks"
-            else:
-                goal_preview = (function_args.get("goal") or "")[:30]
-                spinner_label = f"⤳ {goal_preview}" if goal_preview else "⤳ delegating"
+            target = function_args.get("target_agent", "")
+            task = function_args.get("task", "") or function_args.get("goal", "")
+            ctx = function_args.get("context", "")
+            spinner_label = f"⤳ @{target}: {task[:30]}" if target else "⤳ delegating"
             spinner = None
             if self.quiet_mode and self._show_display:
                 face = random.choice(KawaiiSpinner.KAWAII_WAITING)
@@ -2891,14 +2906,13 @@ class AIAgent:
             self._delegate_spinner = spinner
             _delegate_result = None
             try:
+                # In subprocess mode, use the protocol to delegate via TUI
+                _proto = getattr(self, '_protocol', None) if getattr(self, '_subprocess_mode', False) else None
                 function_result = _delegate_task(
-                    goal=function_args.get("goal"),
-                    context=function_args.get("context"),
-                    toolsets=function_args.get("toolsets"),
-                    tasks=tasks_arg,
-                    model=function_args.get("model"),
-                    max_iterations=function_args.get("max_iterations"),
-                    parent_agent=self,
+                    target_agent=target,
+                    task=task,
+                    context=ctx,
+                    protocol=_proto,
                 )
                 _delegate_result = function_result
             finally:
@@ -4827,7 +4841,28 @@ def _run_subprocess_mode():
             agent.interrupt()
             continue
 
-        if msg_type == "UserInput":
+        # DelegatedTask: another agent delegated work to us via the TUI.
+        # Treat it like a UserInput but also emit DelegationResult when done.
+        _delegation_request_id = None
+        if msg_type == "DelegatedTask":
+            from_agent = msg.get("from_agent", "unknown")
+            _delegation_request_id = msg.get("request_id", "")
+            task = msg.get("task", "")
+            context = msg.get("context", "")
+            user_content = f"[Delegated task from @{from_agent}] {task}"
+            if context:
+                user_content += f"\n\nContext: {context}"
+        elif msg_type == "CrossAgentContext":
+            # Inject cross-agent context into conversation and continue
+            from_agent = msg.get("from_agent", "unknown")
+            summary = msg.get("summary", "")
+            if summary:
+                conversation_history.append({
+                    "role": "user",
+                    "content": f"[Result from @{from_agent}]: {summary}",
+                })
+            continue
+        elif msg_type == "UserInput":
             user_content = msg.get("message", "")
             # Allow TUI to override model and max_iterations per-message
             msg_model = msg.get("model")
@@ -4839,70 +4874,97 @@ def _run_subprocess_mode():
             msg_session_id = msg.get("session_id")
             if msg_session_id:
                 agent.session_id = msg_session_id
-
-            agent.clear_interrupt()
-
-            # Start an interrupt watcher that polls StdinReader during
-            # agent execution so Interrupt/Shutdown messages are handled
-            # while run_conversation is blocking the main thread.
-            _interrupt_stop = threading.Event()
-            _shutdown_from_watcher = [False]
-
-            def _watch_interrupts():
-                while not _interrupt_stop.is_set():
-                    imsg = stdin_reader.get(timeout=0.2)
-                    if imsg is None:
-                        continue
-                    itype = imsg.get("type")
-                    if itype == "Interrupt":
-                        agent.interrupt()
-                    elif itype == "Shutdown":
-                        _shutdown_from_watcher[0] = True
-                        agent.interrupt()
-                        return
-                    else:
-                        # Re-queue messages we don't handle (e.g. UserInput
-                        # that arrived while agent was finishing up)
-                        stdin_reader._queue.put(imsg)
-
-            watcher = threading.Thread(target=_watch_interrupts, daemon=True)
-            watcher.start()
-
-            try:
-                result = agent.run_conversation(
-                    user_message=user_content,
-                    conversation_history=conversation_history,
-                )
-                # Update conversation history for next turn
-                conversation_history = result.get("messages", [])
-                agent._session_messages = conversation_history
-
-                # Emit done with iteration count
-                iterations = result.get("api_calls", 0)
-                if result.get("interrupted"):
-                    protocol.emit_done("interrupted", iterations=iterations)
-                elif result.get("completed"):
-                    protocol.emit_done("completed", iterations=iterations)
-                elif result.get("error"):
-                    protocol.emit_error(result["error"], "CONVERSATION_ERROR")
-                    protocol.emit_done("error", iterations=iterations)
-                else:
-                    protocol.emit_done("completed", iterations=iterations)
-
-            except Exception as e:
-                protocol.emit_error(str(e)[:500], "AGENT_ERROR")
-                protocol.emit_done("error", iterations=0)
-            finally:
-                _interrupt_stop.set()
-                watcher.join(timeout=1.0)
-
-            if _shutdown_from_watcher[0]:
-                break
-
+        else:
+            # Unknown message type — ignore
+            logger.debug("Subprocess mode: ignoring unknown message type: %s", msg_type)
             continue
 
-        # Unknown message type — ignore
-        logger.debug("Subprocess mode: ignoring unknown message type: %s", msg_type)
+        agent.clear_interrupt()
+
+        # Start an interrupt watcher that polls StdinReader during
+        # agent execution so Interrupt/Shutdown messages are handled
+        # while run_conversation is blocking the main thread.
+        _interrupt_stop = threading.Event()
+        _shutdown_from_watcher = [False]
+
+        def _watch_interrupts():
+            while not _interrupt_stop.is_set():
+                imsg = stdin_reader.get(timeout=0.2)
+                if imsg is None:
+                    continue
+                itype = imsg.get("type")
+                if itype == "Interrupt":
+                    agent.interrupt()
+                elif itype == "Shutdown":
+                    _shutdown_from_watcher[0] = True
+                    agent.interrupt()
+                    return
+                else:
+                    # Re-queue messages we don't handle (e.g. UserInput
+                    # that arrived while agent was finishing up)
+                    stdin_reader._queue.put(imsg)
+
+        watcher = threading.Thread(target=_watch_interrupts, daemon=True)
+        watcher.start()
+
+        try:
+            result = agent.run_conversation(
+                user_message=user_content,
+                conversation_history=conversation_history,
+            )
+            # Update conversation history for next turn
+            conversation_history = result.get("messages", [])
+            agent._session_messages = conversation_history
+
+            # If this was a delegated task, emit the result back
+            if _delegation_request_id:
+                # Extract last assistant response as the delegation result
+                delegation_result = ""
+                for m in reversed(conversation_history):
+                    if m.get("role") == "assistant":
+                        content = m.get("content", "")
+                        if isinstance(content, str) and content.strip():
+                            delegation_result = content.strip()[:500]
+                            break
+                        elif isinstance(content, list):
+                            # Handle content blocks
+                            for block in content:
+                                if isinstance(block, dict) and block.get("type") == "text":
+                                    delegation_result = block.get("text", "").strip()[:500]
+                                    break
+                            if delegation_result:
+                                break
+                success = not result.get("error") and not result.get("interrupted")
+                protocol.emit_delegation_result(
+                    _delegation_request_id,
+                    delegation_result or "Task completed.",
+                    success,
+                )
+
+            # Emit done with iteration count
+            iterations = result.get("api_calls", 0)
+            if result.get("interrupted"):
+                protocol.emit_done("interrupted", iterations=iterations)
+            elif result.get("completed"):
+                protocol.emit_done("completed", iterations=iterations)
+            elif result.get("error"):
+                protocol.emit_error(result["error"], "CONVERSATION_ERROR")
+                protocol.emit_done("error", iterations=iterations)
+            else:
+                protocol.emit_done("completed", iterations=iterations)
+
+        except Exception as e:
+            protocol.emit_error(str(e)[:500], "AGENT_ERROR")
+            if _delegation_request_id:
+                protocol.emit_delegation_result(
+                    _delegation_request_id, f"Error: {str(e)[:200]}", False)
+            protocol.emit_done("error", iterations=0)
+        finally:
+            _interrupt_stop.set()
+            watcher.join(timeout=1.0)
+
+        if _shutdown_from_watcher[0]:
+            break
 
 
 if __name__ == "__main__":
