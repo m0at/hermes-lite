@@ -56,7 +56,7 @@ Fixes #
 
 - [ ] I've updated relevant documentation (README, `docs/`, docstrings) — or N/A
 - [ ] I've updated `cli-config.yaml.example` if I added/changed config keys — or N/A
-- [ ] I've updated `CONTRIBUTING.md` or `AGENTS.md` if I changed architecture or workflows — or N/A
+- [ ] I've updated `CONTRIBUTING.md` or `docs/AGENTS.md` if I changed architecture or workflows — or N/A
 - [ ] I've considered cross-platform impact (Windows, macOS) per the [compatibility guide](https://github.com/NousResearch/hermes-agent/blob/main/CONTRIBUTING.md#cross-platform-compatibility) — or N/A
 - [ ] I've updated tool descriptions/schemas if I changed tool behavior — or N/A
 
