@@ -1,0 +1,40 @@
+Hermes-Lite Demo Project Notes
+==============================
+
+This is a sample text file for demonstrating search capabilities.
+
+Features to showcase:
+- Terminal execution with approval for dangerous commands
+- File operations (read, write, patch, search)
+- Background process management
+- TODO task planning
+- Clarify interactive questions
+- Context compression at 85% threshold
+- Multi-agent orchestration with @mentions
+
+Testing checklist:
+[ ] Test terminal tool with safe commands
+[ ] Test terminal tool with dangerous commands (rm -rf, chmod 777)
+[ ] Test write protection (try ~/.ssh/, /etc/passwd)
+[ ] Test fuzzy patch matching with whitespace differences
+[ ] Test background process spawn, poll, kill
+[ ] Test search_files with regex patterns
+[ ] Test todo task state transitions
+[ ] Test clarify with multiple choice and open-ended questions
+[ ] Test context compression triggering
+[ ] Test multi-agent @mentions and /broadcast
+
+Important patterns to remember:
+- TODO comments indicate areas for improvement
+- File paths should use relative paths when possible
+- Background processes are limited to 64 with LRU pruning
+- Fuzzy matching has 8 strategies from exact to context-aware
+
+Security features:
+- 30 dangerous command patterns trigger approval
+- 19 specific + 6 prefix write-deny patterns
+- Session-persistent approvals (can be allowlisted)
+
+TODO: Add more demo scenarios
+TODO: Create video walkthrough
+TODO: Build interactive tutorial mode

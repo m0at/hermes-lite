@@ -1,85 +1,283 @@
 # hermes-lite
 
-A local-first coding agent for macOS. Built on [Hermes](https://github.com/NousResearch) by **Nous Research**, extended with Rust-accelerated internals and a native TUI.
+A local-first coding agent CLI for macOS, built on top of [Hermes](https://github.com/NousResearch) by **Nous Research**.
+
+hermes-lite takes the open-source Hermes Agent, strips it down to a focused Mac coding tool, then extends it with Rust-accelerated internals, a native TUI, and a live integration test suite.
 
 ---
 
-## Origins and Attribution
-
-hermes-lite is a fork of the **Hermes Agent** project by [Nous Research](https://nousresearch.com). The original Hermes is a full-featured AI agent platform supporting web search, browser automation, vision, messaging integrations (Slack/Discord/Telegram/WhatsApp), reinforcement learning, and more.
-
-hermes-lite strips that down to a focused Mac coding agent: terminal execution, file operations, and a planning loop — driven by Anthropic's API or an on-device Qwen model via MLX-VLM.
-
-### What came from where
-
-| Component | Origin | Notes |
-|-----------|--------|-------|
-| Agent conversation loop (`run_agent.py`) | Nous Research / Hermes | Core agent engine — tool dispatch, streaming, context compression |
-| Interactive CLI (`cli.py`) | Nous Research / Hermes | prompt_toolkit REPL, slash commands, session management |
-| Tool system (`tools/`) | Nous Research / Hermes | Terminal, file ops, todo, clarify, approval, process management |
-| System prompt & identity | Nous Research / Hermes | "You are Hermes Agent, created by Nous Research" |
-| Prompt caching (`agent/prompt_caching.py`) | Nous Research / Hermes | Anthropic cache_control strategy |
-| Context compression (`agent/context_compressor.py`) | Nous Research / Hermes | Auto-summarization at 85% context window |
-| Session persistence (`hermes_state.py`) | Nous Research / Hermes | SQLite schema, FTS5 search |
-| Config system (`hermes_cli/`) | Nous Research / Hermes | YAML config, setup wizard, doctor diagnostics |
-| Terminal backends | [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) v2.2.6 | MIT license, by Kilian Lieret & Carlos Jimenez |
-| Rust FSM (`hermes_rs/src/lib.rs`) | hermes-lite (new) | PyO3 state machine replacing Python loop |
-| Rust SessionDB (`hermes_rs/src/session_db.rs`) | hermes-lite (new) | rusqlite replacement for Python SessionDB |
-| Rust TUI (`hermes_tui/`) | hermes-lite (new) | ratatui native terminal UI with subprocess protocol |
-| Subprocess protocol (`SubprocessProtocol`) | hermes-lite (new) | JSON-over-pipes between Rust TUI and Python agent |
-| Loop driver (`agent/loop_driver.py`) | hermes-lite (new) | Python bridge for Rust FSM |
-| Prodpush test suite (`tests/prodpush/`) | hermes-lite (new) | Live integration tests via subprocess protocol |
+**Demo:** Hands-on scenarios, sample project, and automation scripts in [`demo/`](demo/README.md).
 
 ---
 
-## Feature Comparison
+## What This Is
 
-| Feature | Hermes (Nous) | hermes-lite | Claude Code |
-|---------|:---:|:---:|:---:|
-| **Terminal execution** | Local, Docker, SSH, Singularity, Modal, Daytona | Local, Docker, SSH, Singularity, Modal, Daytona | Local only |
-| **File read/write/patch** | Yes | Yes | Yes |
-| **File search (ripgrep)** | Yes | Yes | Yes |
-| **Background processes** | Yes — spawn, poll, kill, stdin | Yes — spawn, poll, kill, stdin | No |
-| **Dangerous command approval** | Yes | Yes | Yes (permissions model) |
-| **Todo/task planning** | Yes | Yes | Yes (TodoWrite) |
-| **Clarify (ask user mid-task)** | Yes | Yes | No |
-| **Session persistence** | SQLite | SQLite + Rust SessionDB (FTS5, WAL) | Conversation memory |
-| **Session resume** | Yes | Yes | Yes |
-| **Context compression** | Yes — auto at 85% | Yes — auto at 85% | Yes — auto |
-| **Prompt caching** | Anthropic cache_control | Anthropic cache_control | Built-in |
-| **Streaming** | Yes | Yes (subprocess protocol) | Yes |
-| **Local models (on-device)** | Yes (MLX-VLM) | Yes (Qwen3.5-9B via MLX-VLM) | No |
-| **Rust-accelerated internals** | No | Yes — FSM, SessionDB | No (Node.js) |
-| **Native TUI** | No | Yes — ratatui with subprocess protocol | Yes (Node.js TUI) |
-| **Multi-agent mode** | Yes | Designed, not yet active | Yes (Agent tool) |
-| **Web search** | Yes | No (removed) | Yes |
-| **Browser automation** | Yes | No (removed) | Yes (via MCP) |
-| **Vision/image analysis** | Yes | No (removed) | Yes |
-| **Messaging (Slack, etc.)** | Yes | No (removed) | No |
-| **MCP server support** | No | No | Yes |
-| **IDE integration** | No | No | Yes (VS Code, JetBrains) |
-| **API provider** | Anthropic, OpenRouter, Nous Portal | Anthropic, local MLX-VLM | Anthropic only |
-| **Platform** | Cross-platform | macOS (Apple Silicon) | Cross-platform |
-| **Prodpush live test suite** | No | Yes — 26 integration tests | No |
+hermes-lite is a **fork** of the Hermes Agent project by [Nous Research](https://nousresearch.com). The original Hermes is a full-featured AI agent platform with web search, browser automation, vision, messaging integrations, and reinforcement learning.
+
+hermes-lite removes all of that and keeps only what matters for a local coding agent: terminal execution, file operations, and a planning loop. On top of that inherited base, we added:
+
+- A **Rust FSM** replacing the Python conversation loop
+- A **Rust SessionDB** replacing the Python SQLite layer
+- A **native ratatui TUI** with multi-agent panes, @mentions, and inter-agent routing
+- A **prodpush integration test suite** that drives the agent end-to-end with real LLM calls
 
 ---
 
-## What's Included
+## Inherited vs New
 
-- Interactive Claude-style CLI with slash commands and rich formatting
-- Shell execution with dangerous-command approval (6 backends)
-- Background process management with crash recovery
-- File read / write / patch / search tools
-- Todo-based task planning
-- Clarify prompts — agent asks you questions mid-task
-- SQLite session persistence with FTS5 full-text search
-- Auto context compression at 85% of context window
-- Anthropic prompt caching (~75% input token cost reduction)
-- Rust-accelerated FSM for the conversation loop
-- Rust SessionDB replacing Python SQLite layer
-- Native ratatui TUI connected via JSON subprocess protocol
-- Optional on-device Qwen3.5-9B via MLX-VLM
-- 1062 unit tests + 26 live prodpush integration tests
+This table is the ground truth for what came from where.
+
+### Inherited from Nous Research / Hermes
+
+| Component | File(s) | What it does |
+|-----------|---------|--------------|
+| Agent conversation loop | `run_agent.py` (~4900 lines) | Core engine — LLM calls via litellm, tool dispatch, streaming, parallel tool execution |
+| Interactive CLI | `cli.py` (~3500 lines) | prompt_toolkit REPL, 23 slash commands, session management |
+| Tool system | `tools/` (12 modules) | Terminal execution, file ops, todo planning, clarify prompts, approval, process management |
+| Tool dispatch | `model_tools.py` | Schema generation (OpenAI format), function call routing |
+| Toolset groupings | `toolsets.py` | Named tool bundles (terminal, file, todo, clarify) |
+| System prompt assembly | `agent/prompt_builder.py` | AGENTS.md/SOUL.md/.cursorrules scanning, prompt injection detection |
+| Prompt caching | `agent/prompt_caching.py` | Anthropic cache_control (system_and_3 strategy) |
+| Context compression | `agent/context_compressor.py` | Auto-summarization at 85% of context window |
+| Model capabilities | `agent/model_capabilities.py` | Feature detection per model |
+| Model metadata | `agent/model_metadata.py` | Context lengths for 26 models, hourly Anthropic metadata fetch |
+| Session persistence | `hermes_state.py` | Python SQLite backend with FTS5 search |
+| Config system | `hermes_cli/` (14 modules) | YAML config, setup wizard, doctor diagnostics, provider resolution |
+| Terminal backends | `tools/environments/` (6 backends) | Local, Docker, SSH, Singularity, Modal, Daytona |
+| Terminal execution engine | `mini-swe-agent/` (vendored) | MIT license, by Kilian Lieret & Carlos Jimenez (v2.2.6) |
+| Trajectory saving | `agent/trajectory.py` | JSONL + ShareGPT format conversation logs |
+| Display formatting | `agent/display.py` | KawaiiSpinner, tool preview formatting |
+| Tool call parsing | `agent/tool_call_parser.py` | LLM response extraction |
+| API key redaction | `agent/redact.py` | Scrubs keys from logs |
+| Local model server | `local_models/serve.py` | MLX-VLM wrapper serving Qwen3.5-9B on port 8800 |
+
+### Built new for hermes-lite
+
+| Component | File(s) | What it does |
+|-----------|---------|--------------|
+| Rust FSM | `hermes_rs/src/lib.rs` | PyO3 state machine — 12 states, 5 actions, 10 response kinds |
+| Rust SessionDB | `hermes_rs/src/session_db.rs` | ~900 lines rusqlite, FTS5, WAL mode, mmap — drop-in replacement for Python backend |
+| Rust TUI | `hermes_tui/` (8 modules) | ratatui 0.29 native terminal UI with streaming, tool progress, clarify dialog |
+| Subprocess protocol | `run_agent.py` SubprocessProtocol class | JSON-over-pipes (11 event types) connecting TUI ↔ Python agent |
+| Loop driver | `agent/loop_driver.py` | Python bridge translating Rust FSM states to AIAgent method calls |
+| Multi-agent TUI wiring | `main.rs`, `multi.rs` | Per-pane subprocesses, @mentions, /split, /broadcast, inter-agent routing |
+| Prodpush test suite | `tests/prodpush/` | 26 live integration tests driving the agent via subprocess protocol |
+| Streaming fixes | `run_agent.py` `_skip_stream` flag | Fixed streaming that was silently broken (never worked in subprocess mode) |
+| Interrupt re-queuing | `run_agent.py` interrupt watcher | Fixed multi-turn conversations (messages were being silently dropped) |
+
+---
+
+## Current Feature List
+
+Everything below is implemented and tested. No vaporware.
+
+### Agent Engine
+
+- **LLM calls via litellm** — any litellm-compatible provider works (Anthropic, OpenAI, OpenRouter, local, etc.)
+- **Streaming token output** — real-time in both CLI and TUI
+- **Parallel tool execution** — non-inline tools run via ThreadPoolExecutor
+- **Inline tools** run sequentially (todo, clarify — they need conversation state or user interaction)
+- **Context compression** — auto-triggers at 85% of model's context window, preserves head+tail, summarizes middle
+- **Prompt caching** — Anthropic-only, system_and_3 strategy (up to 4 cache breakpoints)
+- **Context file scanning** — discovers and injects AGENTS.md, SOUL.md, .cursorrules, .cursor/rules/*.mdc from working directory
+- **Prompt injection detection** — scans context files via `hermes_rs.scan_context_content()`
+- **Trajectory saving** — JSONL and ShareGPT formats to `~/.hermes-lite/logs/`
+- **Max 60 turns** per conversation (configurable)
+
+### Tools (8 total)
+
+| Tool | What it does |
+|------|--------------|
+| `terminal` | Shell commands with dangerous-command approval. 30 regex patterns trigger approval (rm -rf, chmod 777, dd, DROP TABLE, fork bombs, etc.) |
+| `process` | Background process lifecycle — spawn, poll, read, kill, stdin. 200KB rolling buffer. PTY support. Crash recovery via JSON checkpoint. 64 process limit with LRU pruning |
+| `read_file` | Read with line numbers, pagination, fuzzy filename suggestions on typos |
+| `write_file` | Create/overwrite files. Auto-creates parent dirs. Write-deny list blocks sensitive paths (19 specific + 6 prefix patterns: ~/.ssh/, ~/.aws/, /etc/sudoers, shell rc files, etc.) |
+| `patch` | Find-replace with 8 fuzzy matching strategies (exact → line-trimmed → whitespace-normalized → indentation-flexible → escape-normalized → trimmed-boundary → block-anchor → context-aware). Also supports unified V4A diff |
+| `search_files` | ripgrep-backed. Regex content search or glob file find. Output modes: content, files_only, count |
+| `todo` | Task list with pending/in_progress/completed/cancelled states. Compression-aware (survives context compression) |
+| `clarify` | Ask the user multiple-choice or open-ended questions mid-task. TUI renders as modal dialog overlay |
+
+### Terminal Backends (6)
+
+All inherited from the original Hermes, powered by vendored mini-swe-agent v2.2.6.
+
+| Backend | Config |
+|---------|--------|
+| `local` | Default, no config needed |
+| `docker` | `TERMINAL_DOCKER_IMAGE` |
+| `ssh` | `TERMINAL_SSH_HOST`, `_USER`, `_PORT`, `_KEY` |
+| `singularity` | `TERMINAL_SINGULARITY_IMAGE` |
+| `modal` | `modal setup` |
+| `daytona` | — |
+
+### CLI (23 slash commands)
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show available commands |
+| `/tools` | List available tools |
+| `/toolsets` | List available toolsets |
+| `/model` | Switch model mid-session |
+| `/prompt` | View/set custom system prompt |
+| `/personality` | Set a predefined personality |
+| `/clear` | Clear screen and reset conversation |
+| `/history` | Show conversation history |
+| `/new` | Start a new conversation |
+| `/reset` | Reset conversation only (keep screen) |
+| `/retry` | Retry the last message |
+| `/undo` | Remove last user/assistant exchange |
+| `/save` | Save current conversation |
+| `/config` | Show current configuration |
+| `/verbose` | Cycle tool display: off → new → all → verbose |
+| `/thinkon` | Show model thinking/reasoning blocks |
+| `/thinkoff` | Hide thinking blocks |
+| `/compress` | Manually compress conversation context |
+| `/usage` | Show token usage for current session |
+| `/context` | Show remaining context window (ASCII bar) |
+| `/jobs` | List background agent tasks |
+| `/fg` | Bring background task to foreground |
+| `/quit` | Exit (also: /exit, /q) |
+
+### Rust FSM
+
+12 loop states driven by a PyO3 state machine:
+
+`Init` → `BuildPrompt` → `ApiCall` → `ParseResponse` → `CheckScratchpad` → `AdaptToolCalls` → `ExecuteTools` → `CheckInterrupt` → `CheckContext` → `HandleError` → `Summarize` → `Done`
+
+5 actions: `Continue`, `Break`, `Retry`, `Nudge`, `Fail`
+
+10 response kinds: `Text`, `ToolCalls`, `Truncated`, `TruncatedToolCall`, `Invalid`, `EmptyAfterThink`, `IncompleteScratchpad`, `InvalidToolNames`, `InvalidToolJson`, `CodexIncomplete`
+
+### Rust SessionDB
+
+Drop-in replacement for the Python SQLite layer:
+- ~900 lines rusqlite with FTS5 full-text search
+- WAL mode, mmap, synchronous=NORMAL
+- All 19 original methods + `reopen_session()` + `append_messages` batch insert
+- Auto-fallback: tries Rust first, falls back to Python if import fails
+
+### Rust TUI
+
+Native terminal UI (ratatui 0.29 + crossterm 0.28):
+- Spawns Python agent with `--subprocess-mode` (one subprocess per pane)
+- Real-time token streaming
+- Tool call progress with timing
+- Interactive clarify dialog (modal overlay with text input + choice navigation)
+- Multi-agent: split/tab layouts, per-pane subprocesses, @mentions, /broadcast, inter-agent routing
+- Pane navigation: Ctrl+Left/Right, Alt+1-9
+- Interrupt handling (Ctrl+C)
+- Session info, token counters, status bar
+- 2 color schemes: cyber (green/blue), synthwave (pink/purple)
+
+### Subprocess Protocol
+
+JSON lines over stdin/stdout between Rust TUI and Python agent.
+
+**TUI → Agent:**
+```
+UserInput { session_id, message, model, max_iterations }
+ClarifyResponse { response }
+Interrupt
+Shutdown
+```
+
+**Agent → TUI:**
+```
+Ready
+SessionInfo { session_id, model, context_length }
+Token { content, is_thinking }
+ToolCallStart { tool_id, tool_name, args_preview }
+ToolCallResult { tool_id, success, output, duration_ms }
+ResponseComplete { finish_reason, input_tokens, output_tokens }
+LoopStateChange { state, iteration, action, message }
+ClarifyRequest { question, choices, timeout_secs }
+ContextCompressed { old_tokens, new_tokens }
+Done { reason, iterations }
+Error { message, code }
+```
+
+### Session Persistence
+
+Two interchangeable backends (Rust default, Python fallback):
+- SQLite with FTS5 full-text search across all sessions
+- WAL mode for concurrent reads
+- Session resume, branching via `parent_session_id`
+- All stored at `~/.hermes-lite/state.db`
+
+### Model Support
+
+26 models configured with context lengths:
+
+| Provider | Models | Context |
+|----------|--------|---------|
+| Anthropic | Claude Opus 4/4.5/4.6, Sonnet 4, Haiku 4.5 | 200K |
+| OpenAI | GPT-4o, GPT-4-turbo, GPT-4o-mini | 128K |
+| Google | Gemini 2.0-flash, Gemini 2.5-pro | 1M |
+| Meta | Llama 3.3 70B | 131K |
+| DeepSeek | DeepSeek Chat v3 | 65K |
+| Qwen | Qwen 2.5 72B, Qwen3-coder, Qwen3.5 variants | 32-262K |
+| Local | Qwen3.5-9B via MLX-VLM | 32K |
+
+Unknown models are probed at descending context tiers (2M → 1M → 512K → 200K → 128K → 64K → 32K).
+
+### Safety
+
+**Dangerous command approval** — 30 regex patterns covering rm -rf, chmod 777, chown -R root, mkfs, dd, DROP TABLE, DELETE without WHERE, systemctl stop, fork bombs, pipe-to-shell, xargs rm, find -delete. Approvals persist per session, can be permanently allowlisted in config.
+
+**Write protection** — blocks writes to:
+- `~/.ssh/`, `~/.aws/`, `~/.gnupg/`, `~/.kube/` (entire directories)
+- `/etc/sudoers`, `/etc/passwd`, `/etc/shadow`, `/etc/sudoers.d/`, `/etc/systemd/`
+- Shell rc files: `.bashrc`, `.zshrc`, `.profile`, `.bash_profile`, `.zprofile`
+- Credentials: `.netrc`, `.pgpass`, `.npmrc`, `.pypirc`
+- Hermes config: `~/.hermes/.env`, `~/.hermes-lite/.env`
+
+---
+
+### Multi-Agent Mode
+
+The Rust TUI supports multiple agent panes, each with its own independent agent subprocess:
+
+**Commands:**
+- `/split` — spawn a new agent in a vertical split
+- `/hsplit` — spawn in a horizontal split
+- `/tabs` — switch to tab layout (one pane full-width, tab bar at top)
+- `/close` — close the focused pane
+- `/name <n>` — rename the focused agent
+- `/focus <n>` — focus by name or 1-based index
+- `/broadcast <msg>` — send a message to all agents
+- `/ask <target> <msg>` — send to a named agent, pull the response back to your pane
+- `/agents` — list all agents with status, model, and token count
+- `/zoom` — toggle between split and tab layouts
+
+**@mentions:**
+- `@a2 refactor this` — route message to agent "a2"
+- `@researcher! summarize docs` — route to "researcher", pull response back when done
+- `@all run tests` — broadcast to all agents
+
+**Navigation:**
+- `Ctrl+Left/Right` — switch focus between panes
+- `Alt+1-9` — jump to pane by number
+
+Each pane runs its own agent subprocess with independent session, model, tokens, and conversation history. Agents can route inter-agent queries and task delegations through the TUI.
+
+### Image Support
+
+The CLI supports pasting images from clipboard into conversations:
+- **Alt+V** (primary), **Ctrl+V/Cmd+V** (bracketed paste), **`/paste`** (manual)
+- macOS (osascript/pngpaste), WSL2, Wayland (wl-paste), X11 (xclip)
+- Base64-encoded into OpenAI vision format, sent directly to the LLM
+- PNG, JPEG, GIF, WebP supported
+
+---
+
+## Not Implemented
+
+- **Web search** — removed from Hermes
+- **Browser automation** — removed from Hermes
+- **Vision analysis tools** — standalone tools like `vision_analyze` were removed; image paste into conversations works (see above)
+- **Messaging integrations** (Slack, Discord, Telegram, WhatsApp) — removed from Hermes
+- **MCP server support** — not implemented
+- **IDE integration** — not implemented
 
 ---
 
@@ -91,20 +289,20 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-For the Rust extensions (FSM + SessionDB):
+Rust extensions (FSM + SessionDB):
 
 ```bash
 pip install maturin
 maturin develop --release -m hermes_rs/Cargo.toml
 ```
 
-For the Rust TUI:
+Rust TUI:
 
 ```bash
 cargo build --release -p hermes_tui
 ```
 
-For local model support (MLX-VLM on Apple Silicon):
+Local model support (Apple Silicon only):
 
 ```bash
 pip install -e ".[local]"
@@ -120,13 +318,15 @@ Requires Python 3.11+ and Rust 1.75+.
 hermes-lite setup
 ```
 
-This writes configuration to `~/.hermes-lite/`. Then export your API key:
+Writes configuration to `~/.hermes-lite/`. Then export your API key:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-For local models, select **Local** during setup. The CLI targets MLX-VLM at `http://127.0.0.1:8800/v1`.
+For local models, select **Local** during setup. Serves Qwen3.5-9B (4-bit quantized) via MLX-VLM at `http://127.0.0.1:8800/v1`.
+
+Run `hermes-lite doctor` to validate your setup (checks Python version, venv, packages, API keys, ripgrep, local server connectivity).
 
 ---
 
@@ -138,11 +338,13 @@ For local models, select **Local** during setup. The CLI targets MLX-VLM at `htt
 |---------|-------------|
 | `hermes-lite` | Interactive REPL |
 | `hermes-lite chat` | Conversational agent (interactive or single-shot with `-q`) |
+| `hermes-lite doctor` | Run diagnostics (8 checks) |
+| `hermes-lite setup` | Interactive setup wizard |
 | `hermes-lite-agent` | Headless agent runner |
 | `hermes-lite-serve` | Local model server (MLX-VLM) |
 | `./target/release/hermes-tui` | Native Rust TUI |
 
-### Interactive REPL
+### Interactive
 
 ```bash
 hermes-lite                            # new session
@@ -163,217 +365,17 @@ hermes-lite chat --model claude-opus-4-6 -q "refactor main.py"
 ./target/release/hermes-tui
 ```
 
-Spawns the Python agent as a subprocess, communicates via JSON protocol. Features: streaming token display, tool call progress, clarify dialog, interrupt handling.
-
-### Slash Commands
-
-| Command | Description |
-|---------|-------------|
-| `/help` | Show available commands |
-| `/clear` | Clear conversation context |
-| `/model` | Switch model mid-session |
-| `/personality` | Change assistant personality |
-| `/verbose` | Toggle verbose output |
-| `/context` | Show context window usage |
-| `/compact` | Compact history to save context |
-| `/tools` | List enabled tools |
-| `/save` | Save current session |
-| `/history` | Browse past sessions |
-
----
-
-## Tools
-
-8 tools, all enabled by default:
-
-| Tool | Description |
-|------|-------------|
-| `terminal` | Shell commands with dangerous-command approval |
-| `process` | Background process lifecycle — spawn, poll, read, kill, stdin; 200KB rolling buffer; crash recovery |
-| `read_file` | Read with line numbers, pagination, fuzzy filename suggestions |
-| `write_file` | Create/overwrite files; auto-creates dirs; write-deny list for sensitive paths |
-| `patch` | Find-replace with 9 fuzzy strategies or unified V4A diff; syntax check after edit |
-| `search_files` | ripgrep-backed; regex content search or glob find; output: `content`, `files_only`, `count` |
-| `todo` | Task list with `pending`/`in_progress`/`completed`/`cancelled`; compression-aware |
-| `clarify` | Ask the user multiple-choice or open-ended questions mid-task |
-
-### Toolsets
-
-| Toolset | Tools |
-|---------|-------|
-| `terminal` | `terminal`, `process` |
-| `file` | `read_file`, `write_file`, `patch`, `search_files` |
-| `todo` | `todo` |
-| `clarify` | `clarify` |
-| `hermes-lite-cli` | All of the above (default) |
+### Select tools
 
 ```bash
-hermes-lite chat -t "terminal,file"
+hermes-lite chat -t "terminal,file"    # only terminal + file tools
 ```
 
----
-
-## Terminal Backends
-
-Set `TERMINAL_ENV` to select. Default is `local`.
-
-| Backend | Required Config |
-|---------|-----------------|
-| `local` | — |
-| `docker` | `TERMINAL_DOCKER_IMAGE` |
-| `ssh` | `TERMINAL_SSH_HOST`, `_USER`, `_PORT`, `_KEY` |
-| `singularity` | `TERMINAL_SINGULARITY_IMAGE` |
-| `modal` | `modal setup` |
-| `daytona` | — |
+### Select terminal backend
 
 ```bash
 TERMINAL_ENV=docker TERMINAL_DOCKER_IMAGE=ubuntu:24.04 hermes-lite chat
 ```
-
-Powered by a vendored copy of [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) v2.2.6 (MIT, by Kilian Lieret & Carlos Jimenez).
-
----
-
-## Architecture
-
-```
-run_agent.py                  AIAgent — conversation loop, tool dispatch, streaming
-cli.py                        HermesCLI — interactive REPL, prompt_toolkit
-hermes_state.py               Python SessionDB (fallback)
-model_tools.py                Tool schema generation, function call dispatch
-toolsets.py                   Named tool groupings
-
-agent/                        Agent internals (14 modules)
-  loop_driver.py              Rust FSM Python bridge
-  context_compressor.py       Auto compression at 85%
-  prompt_builder.py           System prompt assembly
-  prompt_caching.py           Anthropic cache_control
-  model_capabilities.py       Model feature detection
-  model_metadata.py           Context lengths, token estimation
-  tool_call_parser.py         Tool call extraction
-  tool_prompt_injector.py     Schema injection into prompts
-  tool_response_adapter.py    Response format normalization
-  auxiliary_client.py         Side-channel model for compression
-  display.py                  Spinners, tool preview formatting
-  trajectory.py               Conversation saving (JSONL/ShareGPT)
-  redact.py                   API key redaction
-
-hermes_cli/                   CLI layer (14 modules)
-  main.py                     Entry point, argparse dispatcher
-  config.py                   YAML config management
-  runtime_provider.py         Provider resolution (anthropic/local)
-  setup.py                    Interactive setup wizard
-  doctor.py                   Diagnostics
-  status.py                   Runtime status display
-  models.py, commands.py, banner.py, callbacks.py,
-  clipboard.py, colors.py, color_scheme.py
-
-tools/                        Tool implementations
-  registry.py                 Central tool registry
-  terminal_tool.py            Shell execution orchestration
-  file_tools.py               read_file, write_file, search_files
-  file_operations.py          File operation helpers
-  patch_parser.py             Unified diff patching (9 fuzzy strategies)
-  fuzzy_match.py              Fuzzy filename matching
-  process_registry.py         Background process management
-  todo_tool.py                Task planning
-  clarify_tool.py             Interactive user questions
-  approval.py                 Dangerous command detection
-  interrupt.py                Ctrl+C handling
-  environments/               6 terminal backends (local, docker, ssh, ...)
-
-hermes_rs/                    Rust PyO3 extension
-  src/lib.rs                  FSM: LoopState(12), Action(4), ResponseKind(10)
-  src/session_db.rs           RustSessionDB: rusqlite, FTS5, WAL mode
-
-hermes_tui/                   Rust TUI binary (ratatui)
-  src/main.rs                 Entry point, subprocess management
-  src/app.rs                  App state, conversation history
-  src/ui.rs                   Rendering, clarify dialog overlay
-  src/protocol.rs             ToAgent/FromAgent JSON message types
-  src/subprocess.rs           Python subprocess spawning
-  src/colors.rs               Color scheme
-  src/mention.rs              Multi-agent @mentions (future)
-  src/multi.rs                Multi-agent pane splitting (future)
-
-local_models/                 MLX-VLM server wrapper
-mini-swe-agent/               Vendored terminal backend (MIT)
-tests/                        1062 unit + 26 prodpush integration tests
-docs/                         Design documents
-```
-
-### Subprocess Protocol
-
-The Rust TUI communicates with the Python agent via JSON lines over stdin/stdout:
-
-**TUI to Agent (`ToAgent`):**
-```
-UserInput { session_id, message, model, max_iterations }
-ClarifyResponse { response }
-Interrupt
-Shutdown
-```
-
-**Agent to TUI (`FromAgent`):**
-```
-Ready
-SessionInfo { session_id, model, context_length }
-Token { content, is_thinking }
-ToolCallStart { tool_id, tool_name, args_preview }
-ToolCallResult { tool_id, success, output, duration_ms }
-ResponseComplete { finish_reason, input_tokens, output_tokens }
-LoopStateChange { state, iteration, action, message }
-ClarifyRequest { question, choices, timeout_secs }
-ContextCompressed { old_tokens, new_tokens }
-Done { reason, iterations }
-Error { message, code }
-```
-
----
-
-## Rust Extensions
-
-### FSM (`hermes_rs/src/lib.rs`)
-
-The agent conversation loop is driven by a Rust state machine exposed to Python via PyO3:
-
-- **12 loop states**: `Init`, `BuildPrompt`, `ApiCall`, `ParseResponse`, `CheckScratchpad`, `AdaptToolCalls`, `ExecuteTools`, `CheckInterrupt`, `CheckContext`, `HandleError`, `Summarize`, `Done`
-- **4 actions**: `Continue`, `Break`, `Retry`, `Fail`, `Nudge`
-- **10 response kinds**: `Text`, `ToolCall`, `TruncatedToolCall`, `Empty`, `Invalid`, `IncompleteScratchpad`, `PlanningAck`, `ContextOverflow`, `MaxIterations`, `Interrupted`
-
-Build: `maturin develop --release -m hermes_rs/Cargo.toml`
-
-### SessionDB (`hermes_rs/src/session_db.rs`)
-
-Drop-in replacement for the Python `SessionDB`:
-- ~900 lines rusqlite with FTS5 full-text search
-- WAL mode, mmap, synchronous=NORMAL
-- All 19 original methods + `reopen_session()` + `append_messages` batch
-- Auto-fallback: `try: from hermes_rs import RustSessionDB except: from hermes_state import SessionDB`
-
-### TUI (`hermes_tui/`)
-
-Native terminal UI built with ratatui 0.29 + crossterm 0.28:
-- Spawns Python agent with `--subprocess-mode`
-- Real-time token streaming display
-- Tool call progress with timing
-- Interactive clarify dialog (modal overlay)
-- Interrupt handling (Ctrl+C)
-- Session info, token counters, status bar
-
-Build: `cargo build --release -p hermes_tui`
-Run: `./target/release/hermes-tui`
-
----
-
-## Safety
-
-**Dangerous command detection** — commands involving `rm`, `chmod`, `kill`, `dd`, `iptables`, etc. require explicit approval. Approvals persist for the session.
-
-**Write protection** — `write_file` and `patch` block writes to:
-- `~/.ssh/`, `~/.aws/`, `~/.kube/`
-- `/etc/sudoers`, `/etc/passwd`, `/etc/shadow`
-- Shell rc files (`.bashrc`, `.zshrc`, etc.)
 
 ---
 
@@ -386,9 +388,9 @@ All config lives under `~/.hermes-lite/`:
 | `config.yaml` | Model, provider, compression settings |
 | `.env` | API keys, terminal backend config |
 | `state.db` | SQLite session history |
-| `logs/` | Error logs and trajectory files |
+| `logs/` | Error logs, trajectory files (JSONL + ShareGPT) |
 
-**Key config fields:**
+### Key config fields
 
 ```yaml
 model:
@@ -403,7 +405,7 @@ agent:
   max_turns: 60
 ```
 
-**Environment variables:**
+### Environment variables
 
 | Variable | Description |
 |----------|-------------|
@@ -422,29 +424,50 @@ agent:
 # Unit tests (1062 tests, ~47s)
 python3 -m pytest tests/ -q
 
-# Prodpush integration tests (26 tests, requires API key, ~5min)
+# Prodpush integration tests (26 tests, requires API key, ~4min)
 python3 -m pytest tests/prodpush/ -v -m prodpush --timeout=180
 
-# Specific test category
+# Specific categories
 python3 -m pytest tests/agent/ -v
 python3 -m pytest tests/tools/ -v
 python3 -m pytest tests/hermes_cli/ -v
 ```
 
-| Category | Tests | Coverage |
-|----------|-------|----------|
+### Test coverage
+
+| Category | Tests | What's tested |
+|----------|-------|---------------|
 | `tests/agent/` | 12 modules | FSM, compression, prompt caching, tool parsing, model metadata |
-| `tests/tools/` | 15 modules | All tools, approval, file ops, fuzzy match, process registry |
-| `tests/hermes_cli/` | 3 modules | Config, models, CLI behavior |
-| Core | 9 modules | SessionDB, headless CLI, run_agent, toolsets |
-| `tests/prodpush/` | 26 tests | Live agent via subprocess protocol — file CRUD, terminal, workflows, interrupts, recipes |
+| `tests/tools/` | 15 modules | All 8 tools, approval patterns, file ops, fuzzy matching, process registry |
+| `tests/hermes_cli/` | 3 modules | Config management, model choices, CLI behavior |
+| Core | 9 modules | SessionDB (both backends), headless CLI, run_agent, toolsets |
+| `tests/prodpush/` | 26 tests | Live agent via subprocess — startup, file CRUD, terminal, workflows, interrupts, recipes, edge cases |
+
+The prodpush suite uses the same subprocess protocol as the Rust TUI, so it tests the exact code path a real user exercises.
+
+---
+
+## Architecture
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full breakdown. The short version:
+
+```
+tools/registry.py        → tool registration (no deps)
+tools/*.py               → tool implementations (register at import)
+model_tools.py           → schema generation + dispatch
+run_agent.py             → AIAgent conversation loop
+cli.py                   → interactive REPL
+hermes_cli/main.py       → entry point
+```
+
+The Rust FSM (`hermes_rs`) drives the loop, with `agent/loop_driver.py` bridging Rust states to Python method calls. The Rust TUI (`hermes_tui`) spawns the Python agent as a subprocess and communicates via the JSON protocol.
 
 ---
 
 ## License
 
 hermes-lite builds on:
-- **Hermes** by [Nous Research](https://nousresearch.com)
-- **mini-swe-agent** v2.2.6 by Kilian Lieret & Carlos Jimenez (MIT)
+- **Hermes** by [Nous Research](https://nousresearch.com) — the agent engine, CLI, tools, and config system
+- **mini-swe-agent** v2.2.6 by Kilian Lieret & Carlos Jimenez (MIT) — terminal execution backends
 
-The Rust extensions (`hermes_rs/`, `hermes_tui/`), subprocess protocol, loop driver, and prodpush test suite are original to hermes-lite.
+The Rust extensions (`hermes_rs/`, `hermes_tui/`), subprocess protocol, loop driver, streaming fixes, and prodpush test suite are original to hermes-lite.

@@ -112,7 +112,7 @@ hermes_cli/main.py            (argparse entry point)
 
 ### Agent Loop (run_agent.py + agent/loop_driver.py)
 
-The conversation loop lives in `AIAgent.chat()`. The Rust FSM in `hermes_rs` defines 12 loop states and 4 actions; `agent/loop_driver.py` bridges the Rust state machine to Python, calling back into `AIAgent` methods for LLM calls, tool execution, and context compression.
+The conversation loop lives in `AIAgent.chat()`. The Rust FSM in `hermes_rs` defines 12 loop states and 5 actions; `agent/loop_driver.py` bridges the Rust state machine to Python, calling back into `AIAgent` methods for LLM calls, tool execution, and context compression.
 
 The loop:
 1. Add user message to conversation

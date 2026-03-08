@@ -320,6 +320,7 @@ pub struct AgentPane {
 
     // Spinner (per-agent since each can be independently busy)
     pub spinner_frame: usize,
+    pub dots_frame: usize,
     pub last_spinner_tick: Instant,
 
     // Status
@@ -351,6 +352,7 @@ impl AgentPane {
             streaming_text: String::new(),
             is_thinking: false,
             spinner_frame: 0,
+            dots_frame: 0,
             last_spinner_tick: Instant::now(),
             status_message: None,
             unread: false,
@@ -480,8 +482,10 @@ impl AgentPane {
     }
 
     pub fn tick_spinner(&mut self) {
-        if self.last_spinner_tick.elapsed().as_millis() >= 120 {
+        let elapsed = self.last_spinner_tick.elapsed().as_millis();
+        if elapsed >= 150 {
             self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
+            self.dots_frame = (self.dots_frame + 1) % DOTS_FRAMES.len();
             self.last_spinner_tick = Instant::now();
         }
     }
@@ -513,6 +517,7 @@ pub struct MultiApp {
     pub running: bool,
     pub active_pane: ActivePane,
     pub show_thinking: bool,
+    pub show_help: bool,
     pub working_dir: String,
 }
 
@@ -532,6 +537,7 @@ impl MultiApp {
             running: true,
             active_pane: ActivePane::Input,
             show_thinking: false,
+            show_help: false,
             working_dir: cwd,
         }
     }
@@ -625,4 +631,5 @@ impl std::ops::DerefMut for MultiApp {
 /// Backward compatibility alias.
 pub type App = MultiApp;
 
-pub const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+pub const SPINNER_FRAMES: &[&str] = &["◐", "◓", "◑", "◒"];
+pub const DOTS_FRAMES: &[&str] = &["   ", ".  ", ".. ", "..."];

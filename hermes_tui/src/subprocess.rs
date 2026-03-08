@@ -140,9 +140,11 @@ fn find_run_agent() -> Result<PathBuf, String> {
         PathBuf::from("run_agent.py"),
         PathBuf::from("../run_agent.py"),
         {
+            // Binary is at target/release/hermes-tui — go up 3 levels to repo root
             let mut p = std::env::current_exe().unwrap_or_default();
-            p.pop(); // bin dir
-            p.pop(); // project root
+            p.pop(); // release/
+            p.pop(); // target/
+            p.pop(); // repo root
             p.push("run_agent.py");
             p
         },

@@ -1,0 +1,24 @@
+{
+  "project": "hermes-lite-demo",
+  "version": "1.0.0",
+  "description": "Sample data file for demonstrating search_files tool",
+  "features": [
+    "terminal execution",
+    "file operations",
+    "background processes",
+    "fuzzy patch matching",
+    "context compression",
+    "multi-agent mode"
+  ],
+  "todo_items": [
+    "Add more test coverage",
+    "Improve documentation",
+    "Add performance benchmarks"
+  ],
+  "statistics": {
+    "total_tools": 8,
+    "total_tests": 1062,
+    "integration_tests": 26,
+    "fuzzy_strategies": 8
+  }
+}

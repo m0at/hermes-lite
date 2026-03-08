@@ -1,0 +1,32 @@
+# Sample configuration file for hermes-lite demo
+# This demonstrates the search_files tool finding YAML content
+
+model:
+  default: "claude-sonnet-4-5-20250929"
+  provider: "anthropic"
+  temperature: 0.7
+
+agent:
+  max_turns: 60
+  timeout: 300
+
+compression:
+  enabled: true
+  threshold: 0.85
+  
+tools:
+  # TODO: Add tool-specific configuration
+  terminal:
+    timeout: 60
+    dangerous_commands_approval: true
+  
+  file:
+    write_protection: true
+    fuzzy_matching: true
+  
+  process:
+    max_processes: 64
+    buffer_size: 204800
+
+# TODO: Add logging configuration
+# TODO: Add multi-agent settings

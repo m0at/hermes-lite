@@ -3,80 +3,8 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap},
 };
 
-use crate::app::{Message, MessagePart, Role, ToolStatus, SPINNER_FRAMES};
+use crate::app::{AgentPane, App, LayoutMode, Message, MessagePart, Role, ToolStatus, SPINNER_FRAMES, DOTS_FRAMES};
 use crate::colors;
-use crate::ui;
-
-// ── Placeholder types ────────────────────────────────────────────────────
-//
-// These will be replaced when the app.rs refactor lands with AgentPane + MultiApp.
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum LayoutMode {
-    Vertical,
-    Horizontal,
-}
-
-impl LayoutMode {
-    pub fn direction(self) -> Direction {
-        match self {
-            LayoutMode::Vertical => Direction::Horizontal, // vertical splits = horizontal layout
-            LayoutMode::Horizontal => Direction::Vertical,
-        }
-    }
-}
-
-/// Per-agent pane state. Mirrors the subset of App fields needed for rendering.
-pub struct PaneState {
-    pub name: String,
-    pub messages: Vec<Message>,
-    pub scroll_offset: u16,
-    pub history_height: u16,
-
-    pub model: String,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
-    pub context_length: u32,
-
-    pub agent_running: bool,
-    pub loop_state: String,
-    pub loop_iteration: u32,
-    pub streaming_text: String,
-    pub is_thinking: bool,
-    pub show_thinking: bool,
-
-    pub spinner_frame: usize,
-    pub status_message: Option<(String, std::time::Instant)>,
-    pub has_unread: bool,
-}
-
-impl PaneState {
-    pub fn total_tokens(&self) -> u32 {
-        self.input_tokens + self.output_tokens
-    }
-
-    pub fn context_percent(&self) -> f32 {
-        if self.context_length == 0 {
-            return 0.0;
-        }
-        (self.input_tokens as f32 / self.context_length as f32) * 100.0
-    }
-}
-
-/// State for the multi-pane application.
-pub struct MultiAppState {
-    pub panes: Vec<PaneState>,
-    pub focused: usize,
-    pub layout_mode: LayoutMode,
-    pub broadcast_mode: bool,
-    pub global_model: String,
-}
-
-impl MultiAppState {
-    pub fn total_tokens_all(&self) -> u32 {
-        self.panes.iter().map(|p| p.total_tokens()).sum()
-    }
-}
 
 // ── Internal layout for a single pane ────────────────────────────────────
 
@@ -124,11 +52,11 @@ fn build_pane_layout(area: Rect, is_focused: bool) -> PaneLayout {
 /// Render split-pane layout: N equal columns (or rows) with a shared status bar.
 pub fn render_split(
     frame: &mut Frame,
-    state: &mut MultiAppState,
+    app: &mut App,
     textareas: &[tui_textarea::TextArea],
 ) {
     let area = frame.area();
-    let n = state.panes.len().max(1);
+    let n = app.panes.len().max(1);
 
     // Reserve bottom row for global status bar
     let vertical = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]);
@@ -139,14 +67,22 @@ pub fn render_split(
         .map(|_| Constraint::Ratio(1, n as u32))
         .collect();
 
+    let direction = match app.layout_mode {
+        LayoutMode::Split { direction } => direction,
+        LayoutMode::Tabs => Direction::Horizontal, // fallback
+    };
+
     let pane_areas = Layout::default()
-        .direction(state.layout_mode.direction())
+        .direction(direction)
         .constraints(constraints)
         .split(main_area);
 
+    let focused = app.focused as usize;
+    let show_thinking = app.show_thinking;
+
     for (i, pane_area) in pane_areas.iter().enumerate() {
-        let is_focused = state.focused == i;
-        let pane = &mut state.panes[i];
+        let is_focused = focused == i;
+        let pane = &mut app.panes[i];
 
         // Pane border
         let border_color = if is_focused {
@@ -155,7 +91,7 @@ pub fn render_split(
             colors::DIM
         };
 
-        let title = build_pane_title(&pane.name, is_focused, pane.agent_running, pane.has_unread);
+        let title = build_pane_title(&pane.name, is_focused, pane.agent_running, pane.unread);
 
         let block = Block::default()
             .borders(Borders::ALL)
@@ -167,7 +103,7 @@ pub fn render_split(
 
         let layout = build_pane_layout(inner, is_focused);
 
-        render_pane_inner(pane, frame, &layout);
+        render_pane_inner(pane, frame, &layout, show_thinking);
 
         if is_focused {
             if let Some(input_rect) = layout.input {
@@ -178,14 +114,14 @@ pub fn render_split(
         }
     }
 
-    render_global_status_bar(state, frame, status_area);
+    render_global_status_bar(app, frame, status_area);
 }
 
 /// Render tab-mode layout: tab bar at top, focused pane full-width below,
 /// global status bar at the bottom.
 pub fn render_tabs(
     frame: &mut Frame,
-    state: &mut MultiAppState,
+    app: &mut App,
     textareas: &[tui_textarea::TextArea],
 ) {
     let area = frame.area();
@@ -199,47 +135,47 @@ pub fn render_tabs(
     let [tab_area, content_area, status_area] = vertical.areas(area);
 
     // Render tab bar
-    render_tab_bar(state, frame, tab_area);
+    render_tab_bar(app, frame, tab_area);
 
-    // Render the focused pane full-width using the standard single-pane ui functions.
-    // We delegate to the existing ui.rs layout for the content area, but we need an
-    // App-like interface. Instead, use render_pane_inner with a focused layout.
-    if let Some(pane) = state.panes.get_mut(state.focused) {
+    // Render the focused pane full-width
+    let focused = app.focused as usize;
+    let show_thinking = app.show_thinking;
+    if let Some(pane) = app.panes.get_mut(focused) {
         let layout = build_pane_layout(content_area, true);
 
-        render_pane_inner(pane, frame, &layout);
+        render_pane_inner(pane, frame, &layout, show_thinking);
 
         if let Some(input_rect) = layout.input {
-            if let Some(ta) = textareas.get(state.focused) {
+            if let Some(ta) = textareas.get(focused) {
                 render_pane_input(pane, frame, input_rect, ta);
             }
         }
     }
 
-    render_global_status_bar(state, frame, status_area);
+    render_global_status_bar(app, frame, status_area);
 }
 
-/// Render a single pane's history + spinner into the given layout areas.
-/// Operates on PaneState directly so it works with any layout arrangement.
-pub fn render_pane_inner(pane: &mut PaneState, frame: &mut Frame, layout: &PaneLayout) {
-    render_pane_history(pane, frame, layout.history);
+/// Render a single pane's history + spinner.
+fn render_pane_inner(pane: &mut AgentPane, frame: &mut Frame, layout: &PaneLayout, show_thinking: bool) {
+    render_pane_history(pane, frame, layout.history, show_thinking);
     render_pane_spinner(pane, frame, layout.spinner);
 }
 
 /// Global status bar spanning the full terminal width.
-pub fn render_global_status_bar(state: &MultiAppState, frame: &mut Frame, area: Rect) {
-    let model_display = if state.global_model.is_empty() {
+fn render_global_status_bar(app: &App, frame: &mut Frame, area: Rect) {
+    let model = &app.focused_pane().model;
+    let model_display = if model.is_empty() {
         "no model".to_string()
-    } else if state.global_model.len() > 24 {
-        format!("{}...", &state.global_model[..21])
+    } else if model.len() > 24 {
+        format!("{}...", &model[..21])
     } else {
-        state.global_model.clone()
+        model.clone()
     };
 
-    let total = state.total_tokens_all();
-    let agent_count = state.panes.len();
+    let total: u32 = app.panes.iter().map(|p| p.total_tokens()).sum();
+    let agent_count = app.panes.len();
 
-    let broadcast_span = if state.broadcast_mode {
+    let broadcast_span = if app.broadcast_mode {
         Span::styled(" BROADCAST ", Style::default().fg(Color::Black).bg(colors::WARNING).bold())
     } else {
         Span::raw("")
@@ -264,7 +200,7 @@ pub fn render_global_status_bar(state: &MultiAppState, frame: &mut Frame, area: 
         Span::styled(" | ", Style::default().fg(colors::SEPARATOR)),
         broadcast_span,
         Span::styled(
-            " Ctrl+<-/-> focus  Ctrl+T tabs/split",
+            " Ctrl+←/→ focus  /split /tabs /agents",
             Style::default().fg(colors::DIM),
         ),
     ]);
@@ -315,11 +251,11 @@ fn build_pane_title<'a>(
     spans
 }
 
-fn render_tab_bar(state: &MultiAppState, frame: &mut Frame, area: Rect) {
+fn render_tab_bar(app: &App, frame: &mut Frame, area: Rect) {
     let mut spans: Vec<Span> = Vec::new();
 
-    for (i, pane) in state.panes.iter().enumerate() {
-        let is_active = state.focused == i;
+    for (i, pane) in app.panes.iter().enumerate() {
+        let is_active = app.focused as usize == i;
 
         if i > 0 {
             spans.push(Span::styled(" | ", Style::default().fg(colors::SEPARATOR)));
@@ -336,14 +272,14 @@ fn render_tab_bar(state: &MultiAppState, frame: &mut Frame, area: Rect) {
                 let spinner = SPINNER_FRAMES[pane.spinner_frame];
                 label = format!("{} {spinner}", label);
             }
-            if pane.has_unread {
+            if pane.unread {
                 label = format!("{label} .");
             }
             spans.push(Span::styled(label, Style::default().fg(colors::DIM)));
         }
     }
 
-    // "+" button to spawn new agent
+    // "+" hint
     spans.push(Span::styled(" | ", Style::default().fg(colors::SEPARATOR)));
     spans.push(Span::styled("+", Style::default().fg(colors::BRONZE)));
 
@@ -352,17 +288,17 @@ fn render_tab_bar(state: &MultiAppState, frame: &mut Frame, area: Rect) {
     frame.render_widget(bar, area);
 }
 
-fn render_pane_history(pane: &mut PaneState, frame: &mut Frame, area: Rect) {
+fn render_pane_history(pane: &mut AgentPane, frame: &mut Frame, area: Rect, show_thinking: bool) {
     pane.history_height = area.height;
 
     let mut lines: Vec<Line> = Vec::new();
 
     for msg in &pane.messages {
-        lines.extend(render_pane_message(msg, area.width as usize, pane.show_thinking));
+        lines.extend(render_pane_message(msg, area.width as usize, show_thinking));
         lines.push(Line::default());
     }
 
-    // Streaming text (not yet finalized into a message)
+    // Streaming text
     if !pane.streaming_text.is_empty() {
         let style = if pane.is_thinking {
             Style::default().fg(colors::THINK_BLOCK).italic().dim()
@@ -374,11 +310,22 @@ fn render_pane_history(pane: &mut PaneState, frame: &mut Frame, area: Rect) {
         }
     }
 
-    let total_lines = lines.len() as u16;
+    let wrap_width = area.width as usize;
+    let total_lines: u16 = lines
+        .iter()
+        .map(|line| {
+            let w = line.width();
+            if w == 0 || wrap_width == 0 {
+                1u16
+            } else {
+                ((w as u16).saturating_sub(1) / wrap_width as u16) + 1
+            }
+        })
+        .sum();
     let visible = area.height;
     let max_scroll = total_lines.saturating_sub(visible);
     let scroll = if pane.scroll_offset == 0 {
-        max_scroll // auto-scroll to bottom
+        max_scroll
     } else {
         max_scroll.saturating_sub(pane.scroll_offset)
     };
@@ -428,10 +375,10 @@ fn render_pane_message(msg: &Message, width: usize, show_thinking: bool) -> Vec<
         }
         Role::Assistant => {
             lines.push(Line::from(vec![
-                Span::styled("--", Style::default().fg(colors::GOLD)),
+                Span::styled("──", Style::default().fg(colors::GOLD)),
                 Span::styled(" Hermes ", Style::default().fg(colors::GOLD).bold()),
                 Span::styled(
-                    "-".repeat(width.saturating_sub(12)),
+                    "─".repeat(width.saturating_sub(12)),
                     Style::default().fg(colors::GOLD),
                 ),
             ]));
@@ -475,7 +422,7 @@ fn render_pane_message(msg: &Message, width: usize, show_thinking: bool) -> Vec<
                 }
             }
             lines.push(Line::styled(
-                "-".repeat(width),
+                "─".repeat(width),
                 Style::default().fg(colors::GOLD),
             ));
         }
@@ -547,24 +494,34 @@ fn render_tool_line<'a>(tool_name: &str, args_preview: &str, status: &ToolStatus
     }
 }
 
-fn render_pane_spinner(pane: &PaneState, frame: &mut Frame, area: Rect) {
+fn render_pane_spinner(pane: &AgentPane, frame: &mut Frame, area: Rect) {
     let content = if pane.agent_running {
-        let spinner = SPINNER_FRAMES[pane.spinner_frame];
+        let spinner = SPINNER_FRAMES[pane.spinner_frame % SPINNER_FRAMES.len()];
+        let dots = DOTS_FRAMES[pane.dots_frame % DOTS_FRAMES.len()];
         let state_info = if pane.loop_state.is_empty() {
             String::new()
         } else {
             format!(" | {}", pane.loop_state)
         };
+        let spinner_color = if pane.spinner_frame % 2 == 0 {
+            colors::AMBER
+        } else {
+            colors::GOLD
+        };
         Line::from(vec![
             Span::styled(
                 format!(" {spinner} "),
-                Style::default().fg(colors::AMBER).bold(),
+                Style::default().fg(spinner_color).bold(),
             ),
             Span::styled(
                 format!("Iteration {}", pane.loop_iteration),
                 Style::default().fg(colors::CREAM),
             ),
             Span::styled(state_info, Style::default().fg(colors::DIM)),
+            Span::styled(
+                format!(" {dots}"),
+                Style::default().fg(colors::AMBER),
+            ),
         ])
     } else if let Some((ref msg, when)) = pane.status_message {
         if when.elapsed().as_secs() < 10 {
@@ -580,7 +537,7 @@ fn render_pane_spinner(pane: &PaneState, frame: &mut Frame, area: Rect) {
 }
 
 fn render_pane_input(
-    pane: &PaneState,
+    pane: &AgentPane,
     frame: &mut Frame,
     area: Rect,
     textarea: &tui_textarea::TextArea,

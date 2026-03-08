@@ -2166,6 +2166,7 @@ class AIAgent:
             return litellm.completion(**kwargs)
 
         kwargs["stream"] = True
+        kwargs["stream_options"] = {"include_usage": True}
         stream = litellm.completion(**kwargs)
 
         # Accumulate streamed chunks into a full response
@@ -3339,6 +3340,7 @@ class AIAgent:
         final_response = None
         interrupted = False
         codex_ack_continuations = 0
+        _write_call_count = 0  # Track file-creation tool calls for over-generation check
 
         # Clear any stale interrupt state at start
         self.clear_interrupt()
@@ -4175,6 +4177,36 @@ class AIAgent:
                     if hasattr(self, '_planning_nudges'):
                         self._planning_nudges = 0
 
+                    # ── Over-generation guardrail ──
+                    # Count write_file calls in this turn and inject a checkpoint
+                    # nudge when the agent has created many files. This catches the
+                    # pattern where a model keeps generating summaries/indexes/guides
+                    # instead of stopping when the task is done.
+                    _WRITE_TOOLS = {"write_file", "patch"}
+                    _OVERGEN_THRESHOLD = 8  # files before first checkpoint
+                    _OVERGEN_INTERVAL = 5   # files between subsequent checkpoints
+                    for tc in (assistant_message.tool_calls or []):
+                        if tc.function.name in _WRITE_TOOLS:
+                            _write_call_count += 1
+                    if _write_call_count >= _OVERGEN_THRESHOLD and (
+                        _write_call_count == _OVERGEN_THRESHOLD
+                        or (_write_call_count - _OVERGEN_THRESHOLD) % _OVERGEN_INTERVAL == 0
+                    ):
+                        _checkpoint = {
+                            "role": "user",
+                            "content": (
+                                f"[System checkpoint: you have created or modified {_write_call_count} files "
+                                "so far. Pause and evaluate: is the original task complete? "
+                                "If yes, stop and give your final response — do not create "
+                                "additional summaries, indexes, or meta-documents. If the task "
+                                "genuinely requires more files, continue.]"
+                            ),
+                        }
+                        messages.append(_checkpoint)
+                        self._log_msg_to_db(_checkpoint)
+                        if not self.quiet_mode:
+                            self._print(f"{self.log_prefix}› Over-generation checkpoint at {_write_call_count} file writes")
+
                     if self.compression_enabled and self.context_compressor.should_compress():
                         messages, active_system_prompt = self._compress_context(
                             messages, system_message,
@@ -4286,14 +4318,18 @@ class AIAgent:
                     # emitted text instead of continuing with tool calls.
                     # Local models (Qwen etc.) quit more readily than frontier
                     # models, so we use a generous char limit and phrase list.
+                    # Skip nudging if agent has already done substantial work
+                    # (many iterations or file writes) — it likely finished.
                     _is_local_model = self.model.startswith("local/")
                     _max_quit_len = 800 if _is_local_model else 300
                     _max_quit_nudges = 4 if _is_local_model else 2
+                    _substantial_work = api_call_count >= 10 or _write_call_count >= 5
                     if (
                         self.api_mode != "codex_responses"
                         and self.tools
                         and api_call_count > 1
                         and len(final_response) < _max_quit_len
+                        and not _substantial_work
                     ):
                         _quit_phrases = [
                             "read-only", "permission denied", "cannot ",
