@@ -81,12 +81,16 @@ The Rust TUI supports multiple agent panes, each running an independent subproce
 ## Architecture
 
 ```
-hermes_tui/     Rust TUI (ratatui) — multi-pane, subprocess management
-hermes_rs/      Rust extensions (PyO3) — FSM + SessionDB
-run_agent.py    Python agent loop — LLM calls, tool dispatch, streaming
-cli.py          Interactive REPL — 23 slash commands, session management
-agent/          Agent internals — prompt builder, compression, loop driver
-tools/          Tool implementations + 6 terminal backends
+hermes_tui/          Rust TUI (ratatui) — multi-pane, subprocess management
+hermes_rs/           Rust extensions (PyO3) — FSM + SessionDB
+src/
+  run_agent.py       Python agent loop — LLM calls, tool dispatch, streaming
+  cli.py             Interactive REPL — 23 slash commands, session management
+  agent/             Agent internals — prompt builder, compression, loop driver
+  tools/             Tool implementations + 6 terminal backends
+  hermes_cli/        CLI entry point, config, setup wizard
+vendor/
+  mini-swe-agent/    Terminal execution engine (vendored, MIT)
 ```
 
 The Rust FSM drives the conversation loop. `agent/loop_driver.py` bridges Rust states to Python. The TUI spawns Python agents as subprocesses communicating via JSON protocol (11 event types each direction).
@@ -141,6 +145,7 @@ python3 -m pytest tests/prodpush/ -v -m prodpush --timeout=180
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Full architecture reference |
 | [docs/AGENTS.md](docs/AGENTS.md) | Development guide |
 | [docs/MULTI_AGENT_DESIGN.md](docs/MULTI_AGENT_DESIGN.md) | Multi-agent design decisions |
+| [docs/COMPARISON.md](docs/COMPARISON.md) | Comparison with hermes-agent |
 | [demo/README.md](demo/README.md) | Demo scenarios and scripts |
 | [demo/QUICKSTART.md](demo/QUICKSTART.md) | Quick start guide |
 

@@ -6,90 +6,67 @@ hermes-lite is a local-first coding agent CLI for macOS. This document describes
 
 ```
 hermes-lite/
-├── run_agent.py              # AIAgent class — conversation loop, LLM calls, tool dispatch (~4900 lines)
-├── cli.py                    # HermesCLI — interactive REPL with prompt_toolkit (~3500 lines)
-├── model_tools.py            # Tool schema generation and function call dispatch
-├── toolsets.py               # Named tool groupings (terminal, file, todo, clarify)
-├── hermes_state.py           # Python SessionDB — SQLite session persistence (fallback)
-├── hermes_constants.py       # Shared constants
-├── utils.py                  # Atomic JSON write
+├── src/                         # Python source
+│   ├── run_agent.py             # AIAgent class — conversation loop, LLM calls, tool dispatch
+│   ├── cli.py                   # HermesCLI — interactive REPL with prompt_toolkit
+│   ├── model_tools.py           # Tool schema generation and function call dispatch
+│   ├── toolsets.py              # Named tool groupings (terminal, file, todo, clarify)
+│   ├── hermes_state.py          # Python SessionDB — SQLite session persistence (fallback)
+│   ├── hermes_constants.py      # Shared constants
+│   ├── utils.py                 # Atomic JSON write
+│   │
+│   ├── agent/                   # Agent internals
+│   │   ├── loop_driver.py       # Rust FSM Python bridge — drives the agent loop
+│   │   ├── prompt_builder.py    # System prompt assembly, AGENTS.md/SOUL.md scanning
+│   │   ├── context_compressor.py # Auto context compression at 85% capacity
+│   │   ├── prompt_caching.py    # Anthropic prompt caching (system_and_3 strategy)
+│   │   ├── model_metadata.py    # Context lengths, token estimation
+│   │   ├── display.py           # KawaiiSpinner, tool preview formatting
+│   │   ├── redact.py            # API key redaction
+│   │   └── trajectory.py        # Trajectory saving helpers
+│   │
+│   ├── hermes_cli/              # CLI commands and configuration
+│   │   ├── main.py              # Entry point, argparse command dispatcher
+│   │   ├── config.py            # Config management and migration
+│   │   ├── setup.py             # Interactive setup wizard
+│   │   ├── doctor.py            # Diagnostics
+│   │   └── clipboard.py         # Clipboard helpers
+│   │
+│   ├── tools/                   # Tool implementations
+│   │   ├── registry.py          # Central tool registry (no deps)
+│   │   ├── terminal_tool.py     # Shell execution orchestration
+│   │   ├── file_tools.py        # File read/write/search
+│   │   ├── todo_tool.py         # Task planning
+│   │   ├── clarify_tool.py      # Interactive questions
+│   │   ├── delegate_tool.py     # Inter-agent task delegation
+│   │   ├── process_registry.py  # Background process management
+│   │   ├── approval.py          # Dangerous command detection
+│   │   └── environments/        # Terminal execution backends
+│   │       ├── local.py, docker.py, ssh.py, singularity.py, modal.py, daytona.py
+│   │
+│   └── local_models/            # Optional local model server (MLX-VLM)
 │
-├── agent/                    # Agent internals (extracted from run_agent.py)
-│   ├── loop_driver.py        # Rust FSM Python bridge — drives the agent loop
-│   ├── prompt_builder.py     # System prompt assembly, AGENTS.md/SOUL.md scanning
-│   ├── context_compressor.py # Auto context compression at 85% capacity
-│   ├── prompt_caching.py     # Anthropic prompt caching (system_and_3 strategy)
-│   ├── model_capabilities.py # Model feature detection
-│   ├── model_metadata.py     # Context lengths, token estimation
-│   ├── display.py            # KawaiiSpinner, tool preview formatting
-│   ├── tool_call_parser.py   # Tool call extraction from LLM responses
-│   ├── tool_prompt_injector.py # Tool schema injection into prompts
-│   ├── tool_response_adapter.py # Response normalization
-│   ├── auxiliary_client.py   # Side-channel client for compression
-│   ├── redact.py             # API key redaction
-│   └── trajectory.py         # Trajectory saving helpers
-│
-├── hermes_cli/               # CLI commands and configuration
-│   ├── main.py               # Entry point, argparse command dispatcher
-│   ├── config.py             # Config management and migration
-│   ├── runtime_provider.py   # Provider resolution (anthropic/local)
-│   ├── models.py             # Model choices
-│   ├── setup.py              # Interactive setup wizard
-│   ├── status.py             # Status display
-│   ├── doctor.py             # Diagnostics
-│   ├── commands.py           # Slash command definitions
-│   ├── callbacks.py          # Interactive prompt callbacks
-│   ├── banner.py             # Welcome banner
-│   ├── clipboard.py          # Clipboard helpers
-│   ├── colors.py             # Terminal colors
-│   └── color_scheme.py       # Color scheme definitions
-│
-├── tools/                    # Tool implementations
-│   ├── registry.py           # Central tool registry (no deps)
-│   ├── terminal_tool.py      # Shell execution orchestration
-│   ├── file_tools.py         # File read/write/search
-│   ├── file_operations.py    # File operation helpers
-│   ├── patch_parser.py       # Unified diff patch parsing
-│   ├── fuzzy_match.py        # Fuzzy file matching
-│   ├── todo_tool.py          # Task planning
-│   ├── clarify_tool.py       # Interactive questions
-│   ├── process_registry.py   # Background process management
-│   ├── approval.py           # Dangerous command detection
-│   ├── interrupt.py          # Interrupt handling
-│   └── environments/         # Terminal execution backends
-│       ├── base.py           # BaseEnvironment ABC
-│       ├── local.py          # Local subprocess (default)
-│       ├── docker.py         # Docker container
-│       ├── ssh.py            # SSH remote
-│       ├── singularity.py    # Singularity/Apptainer
-│       ├── modal.py          # Modal cloud
-│       └── daytona.py        # Daytona workspace
-│
-├── hermes_rs/                # Rust PyO3 extension (workspace member)
+├── hermes_rs/                   # Rust PyO3 extension (workspace member)
 │   └── src/
-│       ├── lib.rs            # FSM states, transitions, utility functions
-│       └── session_db.rs     # RustSessionDB — high-performance SQLite replacement
+│       ├── lib.rs               # FSM states, transitions, utility functions
+│       └── session_db.rs        # RustSessionDB — high-performance SQLite replacement
 │
-├── hermes_tui/               # Rust TUI binary (workspace member)
+├── hermes_tui/                  # Rust TUI binary (workspace member)
 │   └── src/
-│       ├── main.rs           # Entry point
-│       ├── app.rs            # Application state
-│       ├── ui.rs             # Ratatui rendering
-│       ├── subprocess.rs     # Python agent subprocess management
-│       ├── protocol.rs       # JSON message types (ToAgent/FromAgent)
-│       ├── colors.rs         # Color definitions
-│       ├── mention.rs        # @-mention handling
-│       └── multi.rs          # Multi-agent support
+│       ├── main.rs              # Entry point, app loop, subprocess management
+│       ├── ui.rs                # Ratatui rendering (single pane)
+│       ├── multi.rs             # Multi-agent pane rendering
+│       ├── app.rs               # Application state
+│       ├── protocol.rs          # JSON message types (ToAgent/FromAgent)
+│       └── mention.rs           # @-mention parsing and routing
 │
-├── local_models/             # Optional local model server (MLX-VLM)
-├── mini-swe-agent/           # Vendored terminal execution backend (v2.2.6)
-├── tests/                    # Test suite (~10,000 lines across 39 modules)
-├── docs/                     # Design documents
-│   ├── AGENTS.md             # Development guide for AI assistants and humans
-│   ├── ARCHITECTURE.md       # This file
-│   ├── MULTI_AGENT_DESIGN.md # Multi-agent tmux mode design
-│   └── SKILL_API_DESIGN.md   # Model-as-a-skill API design
-└── README.md                 # User-facing documentation
+├── vendor/
+│   └── mini-swe-agent/          # Vendored terminal execution backend (v2.2.6, MIT)
+│
+├── tests/                       # Test suite (1062 unit + 26 integration tests)
+├── docs/                        # Design documents
+├── demo/                        # Demo scenarios and recording scripts
+└── README.md
 ```
 
 ## Dependency Chain

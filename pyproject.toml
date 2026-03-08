@@ -41,10 +41,14 @@ hermes-lite-agent = "run_agent:main"
 hermes-lite-serve = "local_models.serve:main"
 
 [tool.setuptools]
-py-modules = ["run_agent", "model_tools", "toolsets", "cli", "hermes_constants", "hermes_state"]
+py-modules = ["run_agent", "model_tools", "toolsets", "cli", "hermes_constants", "hermes_state", "utils"]
 
 [tool.setuptools.packages.find]
-include = ["agent", "hermes_cli", "local_models", "tools"]
+where = ["src"]
+include = ["agent*", "hermes_cli*", "local_models*", "tools*"]
+
+[tool.setuptools.package-dir]
+"" = "src"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

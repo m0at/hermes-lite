@@ -53,7 +53,7 @@ from tools.interrupt import set_interrupt as set_interrupt_event, is_interrupted
 
 
 # Add mini-swe-agent to path if not installed
-mini_swe_path = Path(__file__).parent.parent / "mini-swe-agent" / "src"
+mini_swe_path = Path(__file__).parent.parent.parent / "vendor" / "mini-swe-agent" / "src"
 if mini_swe_path.exists():
     sys.path.insert(0, str(mini_swe_path))
 

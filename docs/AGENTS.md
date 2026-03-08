@@ -8,62 +8,25 @@ hermes-lite is a stripped-down local coding agent CLI with Anthropic-first runti
 
 ```
 hermes-lite/
-├── agent/                # Agent internals (extracted from run_agent.py)
-│   ├── auxiliary_client.py  # Side-channel client for compression
-│   ├── context_compressor.py # Auto context compression
-│   ├── display.py           # KawaiiSpinner, tool preview formatting
-│   ├── model_capabilities.py # Model feature detection
-│   ├── model_metadata.py    # Context lengths, token estimation
-│   ├── prompt_builder.py    # System prompt assembly
-│   ├── prompt_caching.py    # Anthropic prompt caching
-│   ├── redact.py            # API key redaction
-│   ├── tool_call_parser.py  # Tool call extraction
-│   ├── tool_prompt_injector.py # Tool schema injection
-│   ├── tool_response_adapter.py # Response normalization
-│   └── trajectory.py        # Trajectory saving helpers
-├── hermes_cli/           # CLI commands
-│   ├── main.py           # Entry point, command dispatcher
-│   ├── config.py         # Config management & migration
-│   ├── runtime_provider.py # Provider resolution (anthropic/local)
-│   ├── models.py         # Model choices
-│   ├── setup.py          # Interactive setup wizard
-│   ├── status.py         # Status display
-│   ├── doctor.py         # Diagnostics
-│   ├── banner.py         # Welcome banner
-│   ├── callbacks.py      # Interactive prompt callbacks
-│   ├── commands.py       # Slash command definitions
-│   ├── clipboard.py      # Clipboard helpers
-│   ├── colors.py         # Terminal colors
-│   └── color_scheme.py   # Color scheme definitions
-├── tools/                # Tool implementations
-│   ├── registry.py            # Central tool registry
-│   ├── approval.py            # Dangerous command detection
-│   ├── environments/          # Terminal execution backends
-│   │   ├── base.py            # BaseEnvironment ABC
-│   │   ├── local.py           # Local execution (default)
-│   │   ├── docker.py          # Docker container execution
-│   │   ├── ssh.py             # SSH remote execution
-│   │   ├── singularity.py     # Singularity/Apptainer
-│   │   ├── modal.py           # Modal cloud execution
-│   │   └── daytona.py         # Daytona cloud sandboxes
-│   ├── terminal_tool.py       # Terminal orchestration
-│   ├── file_tools.py          # File read/write/search
-│   ├── file_operations.py     # File operation helpers
-│   ├── patch_parser.py        # Unified diff patch parsing
-│   ├── fuzzy_match.py         # Fuzzy file matching
-│   ├── todo_tool.py           # Task planning
-│   ├── clarify_tool.py        # Interactive questions
-│   ├── process_registry.py    # Background process management
-│   └── interrupt.py           # Interrupt handling
-├── local_models/         # Optional local model server (MLX)
-├── mini-swe-agent/       # Vendored mini-SWE-agent
-├── cli.py                # Interactive CLI (HermesCLI class)
-├── run_agent.py          # AIAgent class (core conversation loop)
-├── model_tools.py        # Tool orchestration layer
-├── toolsets.py           # Tool groupings
-├── hermes_constants.py   # Shared constants
-├── hermes_state.py       # SQLite session state
-└── utils.py              # Atomic JSON write
+├── src/                     # Python source (package root)
+│   ├── run_agent.py         # AIAgent class (core conversation loop)
+│   ├── cli.py               # Interactive CLI (HermesCLI class)
+│   ├── model_tools.py       # Tool orchestration layer
+│   ├── toolsets.py          # Tool groupings
+│   ├── hermes_state.py      # SQLite session state
+│   ├── hermes_constants.py  # Shared constants
+│   ├── utils.py             # Atomic JSON write
+│   ├── agent/               # Agent internals
+│   ├── hermes_cli/          # CLI commands and configuration
+│   ├── tools/               # Tool implementations + terminal backends
+│   └── local_models/        # Optional local model server (MLX)
+├── hermes_rs/               # Rust PyO3 extension (FSM + SessionDB)
+├── hermes_tui/              # Rust TUI binary (ratatui)
+├── vendor/
+│   └── mini-swe-agent/      # Vendored terminal execution backend (v2.2.6)
+├── tests/                   # Test suite (1062 unit + 26 integration)
+├── docs/                    # Design documents
+└── demo/                    # Demo scenarios and recording scripts
 ```
 
 **User configuration** (stored in `~/.hermes-lite/`):
