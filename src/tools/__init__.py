@@ -5,6 +5,8 @@ Minimal tool exports for hermes-lite.
 
 from .clarify_tool import CLARIFY_SCHEMA, check_clarify_requirements, clarify_tool
 from .delegate_tool import DELEGATE_SCHEMA, check_delegate_requirements, delegate_task
+from .memory_tool import MEMORY_SCHEMA, MemoryStore, check_memory_requirements, memory_tool
+from .skill_tools import SKILLS_LIST_SCHEMA, SKILL_VIEW_SCHEMA, check_skills_requirements, skills_list_tool, skill_view_tool
 from .file_tools import (
     clear_file_ops_cache,
     get_file_tools,
@@ -33,11 +35,14 @@ def check_file_requirements():
 __all__ = [
     "CLARIFY_SCHEMA",
     "DELEGATE_SCHEMA",
+    "MEMORY_SCHEMA",
     "TODO_SCHEMA",
     "TERMINAL_TOOL_DESCRIPTION",
+    "MemoryStore",
     "TodoStore",
     "check_clarify_requirements",
     "check_delegate_requirements",
+    "check_memory_requirements",
     "check_file_requirements",
     "check_terminal_requirements",
     "check_todo_requirements",
@@ -47,6 +52,12 @@ __all__ = [
     "clear_task_env_overrides",
     "clarify_tool",
     "delegate_task",
+    "memory_tool",
+    "SKILLS_LIST_SCHEMA",
+    "SKILL_VIEW_SCHEMA",
+    "check_skills_requirements",
+    "skills_list_tool",
+    "skill_view_tool",
     "get_active_environments_info",
     "get_file_tools",
     "patch_tool",

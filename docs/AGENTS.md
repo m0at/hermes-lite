@@ -24,7 +24,7 @@ hermes-lite/
 ├── hermes_tui/              # Rust TUI binary (ratatui)
 ├── vendor/
 │   └── mini-swe-agent/      # Vendored terminal execution backend (v2.2.6)
-├── tests/                   # Test suite (1062 unit + 26 integration)
+├── tests/                   # Test suite (1065 unit + 26 integration)
 ├── docs/                    # Design documents
 └── demo/                    # Demo scenarios and recording scripts
 ```
@@ -110,6 +110,9 @@ The lite build exposes one default toolset (`hermes-lite-cli`):
 | `patch` | Apply unified diffs |
 | `search_files` | Grep/glob file search |
 | `todo` | Task planning |
+| `memory` | Persistent cross-session memory (global + project, shared across swarm) |
+| `skills_list` | Browse available skill modules |
+| `skill_view` | Load skill instructions for specialized tasks |
 | `clarify` | Ask user a question |
 
 ## Configuration System

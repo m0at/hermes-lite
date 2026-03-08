@@ -136,8 +136,11 @@ impl AgentProcess {
 
 fn find_run_agent() -> Result<PathBuf, String> {
     // Look for run_agent.py relative to the binary or cwd
+    // After repo reorg, run_agent.py lives under src/
     let candidates = [
+        PathBuf::from("src/run_agent.py"),
         PathBuf::from("run_agent.py"),
+        PathBuf::from("../src/run_agent.py"),
         PathBuf::from("../run_agent.py"),
         {
             // Binary is at target/release/hermes-tui — go up 3 levels to repo root
@@ -145,6 +148,16 @@ fn find_run_agent() -> Result<PathBuf, String> {
             p.pop(); // release/
             p.pop(); // target/
             p.pop(); // repo root
+            p.push("src");
+            p.push("run_agent.py");
+            p
+        },
+        {
+            // Fallback: repo root without src/
+            let mut p = std::env::current_exe().unwrap_or_default();
+            p.pop();
+            p.pop();
+            p.pop();
             p.push("run_agent.py");
             p
         },
@@ -152,9 +165,14 @@ fn find_run_agent() -> Result<PathBuf, String> {
 
     for p in &candidates {
         if p.exists() {
+            eprintln!("[subprocess] Found agent script: {}", p.display());
             return Ok(p.clone());
         }
     }
 
-    Err("Could not find run_agent.py".into())
+    let tried: Vec<String> = candidates.iter().map(|p| format!("  - {}", p.display())).collect();
+    Err(format!(
+        "Could not find run_agent.py. Searched:\n{}\nRun from the repo root directory.",
+        tried.join("\n")
+    ))
 }

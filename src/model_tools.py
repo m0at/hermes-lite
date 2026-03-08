@@ -36,6 +36,8 @@ def _discover_tools() -> None:
         "tools.terminal_tool",
         "tools.file_tools",
         "tools.todo_tool",
+        "tools.memory_tool",
+        "tools.skill_tools",
         "tools.process_registry",
         "tools.clarify_tool",
     ]
@@ -52,7 +54,7 @@ TOOL_TO_TOOLSET_MAP: Dict[str, str] = registry.get_tool_to_toolset_map()
 TOOLSET_REQUIREMENTS: Dict[str, dict] = registry.get_toolset_requirements()
 
 _last_resolved_tool_names: List[str] = []
-_AGENT_LOOP_TOOLS = {"todo"}
+_AGENT_LOOP_TOOLS = {"todo", "memory"}
 
 
 def get_tool_definitions(

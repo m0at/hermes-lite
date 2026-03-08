@@ -127,11 +127,25 @@ _DELEGATE_PROMPT = (
 )
 
 SCENES = [
-    # ── Act 1: Build the full weather command center ──────────────────────
+    # ── Act 1: List and load skills ────────────────────────────────────────
     {
-        "title": "Scene 1: Build Hermes Weather Command Center",
+        "title": "Scene 1: Browse skills and load frontend-design",
         "steps": [
             {"type": "wait", "seconds": 3},
+            {"type": "narrate", "text": "Checking available skills..."},
+            {"type": "wait", "seconds": 1},
+            {"type": "send", "text": (
+                "List your available skills, then load the frontend-design skill. "
+                "Briefly summarize what it teaches you."
+            )},
+            {"type": "wait_quiet", "seconds": 30},
+            {"type": "wait", "seconds": 3},
+        ],
+    },
+    # ── Act 2: Build the full weather command center ──────────────────────
+    {
+        "title": "Scene 2: Build Hermes Weather Command Center",
+        "steps": [
             {"type": "narrate", "text": "Building the Hermes Weather Command Center..."},
             {"type": "wait", "seconds": 1},
             {"type": "send", "text": _BUILD_PROMPT},
@@ -139,9 +153,9 @@ SCENES = [
             {"type": "wait", "seconds": 3},
         ],
     },
-    # ── Act 2: Install and launch ─────────────────────────────────────────
+    # ── Act 3: Install and launch ─────────────────────────────────────────
     {
-        "title": "Scene 2: Install and start dev server",
+        "title": "Scene 3: Install and start dev server",
         "steps": [
             {"type": "narrate", "text": "Installing and launching..."},
             {"type": "send", "text": (
@@ -153,9 +167,9 @@ SCENES = [
             {"type": "wait", "seconds": 2},
         ],
     },
-    # ── Act 3: Open and verify ────────────────────────────────────────────
+    # ── Act 4: Open and verify ────────────────────────────────────────────
     {
-        "title": "Scene 3: Open in browser",
+        "title": "Scene 4: Open in browser",
         "steps": [
             {"type": "narrate", "text": "Opening in browser..."},
             {"type": "send", "text": (
@@ -167,9 +181,9 @@ SCENES = [
             {"type": "wait", "seconds": 3},
         ],
     },
-    # ── Act 4: Set up 6-agent swarm ───────────────────────────────────────
+    # ── Act 5: Set up 6-agent swarm ───────────────────────────────────────
     {
-        "title": "Scene 4: Deploy 6-agent swarm",
+        "title": "Scene 5: Deploy 6-agent swarm",
         "steps": [
             {"type": "narrate", "text": "Deploying 6-agent swarm..."},
             {"type": "send", "text": "/name architect"},
@@ -193,9 +207,9 @@ SCENES = [
             {"type": "wait", "seconds": 4},
         ],
     },
-    # ── Act 5: Architect delegates to the swarm ───────────────────────────
+    # ── Act 6: Architect delegates to the swarm ───────────────────────────
     {
-        "title": "Scene 5: Architect delegates to swarm",
+        "title": "Scene 6: Architect delegates to swarm",
         "steps": [
             {"type": "narrate", "text": "Architect delegating tasks to 5 workers..."},
             {"type": "key", "key": "M-1"},
@@ -218,9 +232,9 @@ SCENES = [
             {"type": "wait", "seconds": 2},
         ],
     },
-    # ── Act 6: Architect reviews ──────────────────────────────────────────
+    # ── Act 7: Architect reviews ──────────────────────────────────────────
     {
-        "title": "Scene 6: Architect reviews swarm results",
+        "title": "Scene 7: Architect reviews swarm results",
         "steps": [
             {"type": "narrate", "text": "Architect reviewing results..."},
             {"type": "key", "key": "M-1"},
@@ -230,9 +244,42 @@ SCENES = [
             {"type": "wait", "seconds": 3},
         ],
     },
-    # ── Act 7: Broadcast status check ─────────────────────────────────────
+    # ── Act 8: Architect saves swarm knowledge to shared memory ───────────
     {
-        "title": "Scene 7: Broadcast to all agents",
+        "title": "Scene 8: Save project memories (shared across swarm)",
+        "steps": [
+            {"type": "narrate", "text": "Saving project knowledge to shared memory..."},
+            {"type": "key", "key": "M-1"},
+            {"type": "wait", "seconds": 1},
+            {"type": "send", "text": (
+                "Save what we've built to your project memory so all agents remember it. "
+                "Use the memory tool with target='project' to save: "
+                "(1) The app structure: Vite vanilla JS app at /tmp/hermes-weather with weather.js, chat.js, style.css, main.js. "
+                "(2) The 6-agent swarm roles: architect, frontend, stylist, enhancer, security, qa. "
+                "(3) Key decisions: 8 weather events, split-screen layout, JetBrains Mono font, dark ops theme."
+            )},
+            {"type": "wait_quiet", "seconds": 30},
+            {"type": "wait", "seconds": 2},
+        ],
+    },
+    # ── Act 9: Sub-agent reads shared memories ─────────────────────────────
+    {
+        "title": "Scene 9: Sub-agent reads shared project memories",
+        "steps": [
+            {"type": "narrate", "text": "Frontend agent reading shared memories..."},
+            {"type": "key", "key": "M-2"},
+            {"type": "wait", "seconds": 1},
+            {"type": "send", "text": (
+                "Read your project memories to see what the team has documented about this project. "
+                "Then briefly confirm you can see the shared context from the architect."
+            )},
+            {"type": "wait_quiet", "seconds": 30},
+            {"type": "wait", "seconds": 3},
+        ],
+    },
+    # ── Act 10: Broadcast status check ─────────────────────────────────────
+    {
+        "title": "Scene 10: Broadcast to all agents",
         "steps": [
             {"type": "narrate", "text": "Broadcasting status check..."},
             {"type": "send", "text": "/broadcast Report your status in one sentence."},
@@ -246,9 +293,9 @@ SCENES = [
             {"type": "wait", "seconds": 2},
         ],
     },
-    # ── Act 8: Final app verification ─────────────────────────────────────
+    # ── Act 11: Final app verification ────────────────────────────────────
     {
-        "title": "Scene 8: Final verification",
+        "title": "Scene 11: Final verification",
         "steps": [
             {"type": "narrate", "text": "Final verification..."},
             {"type": "key", "key": "M-1"},
@@ -261,18 +308,18 @@ SCENES = [
             {"type": "wait", "seconds": 3},
         ],
     },
-    # ── Act 9: Usage stats ────────────────────────────────────────────────
+    # ── Act 12: Usage stats ───────────────────────────────────────────────
     {
-        "title": "Scene 9: Usage stats",
+        "title": "Scene 12: Usage stats",
         "steps": [
             {"type": "narrate", "text": "Token usage across the swarm..."},
             {"type": "send", "text": "/usage"},
             {"type": "wait", "seconds": 4},
         ],
     },
-    # ── Act 10: Shutdown ──────────────────────────────────────────────────
+    # ── Act 13: Shutdown ──────────────────────────────────────────────────
     {
-        "title": "Scene 10: Shutdown swarm",
+        "title": "Scene 13: Shutdown swarm",
         "steps": [
             {"type": "narrate", "text": "Shutting down..."},
         ] + [
@@ -368,9 +415,33 @@ class DemoDriver:
         if tmux_has_session():
             tmux_kill()
 
+        # Pass ANTHROPIC_API_KEY through to tmux session so agent subprocess inherits it
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        env_prefix = f"ANTHROPIC_API_KEY={api_key} " if api_key else ""
+
         tmux("new-session", "-d", "-s", TMUX_SESSION,
-             "-x", str(COLS), "-y", str(ROWS), tui_path)
+             "-x", str(COLS), "-y", str(ROWS),
+             "sh", "-c", f"{env_prefix}{tui_path}")
         log("TUI started in tmux session")
+
+        # Wait for agent subprocess to connect — abort early if it doesn't
+        log("Waiting for agent subprocess to connect...")
+        connected = False
+        for _ in range(15):
+            time.sleep(1)
+            content = tmux_capture()
+            if "No agent subprocess" in content:
+                continue
+            if content.strip():
+                connected = True
+                break
+        if not connected:
+            content = tmux_capture()
+            log(f"FATAL: Agent subprocess did not connect after 15s!")
+            log(f"TUI pane content:\n{content[:500]}")
+            tmux_kill()
+            sys.exit(1)
+        log("Agent subprocess connected successfully")
 
     def start_cli(self):
         cli_path = os.path.abspath(HERMES_CLI)
@@ -429,6 +500,10 @@ class DemoDriver:
         while time.time() - start < seconds:
             time.sleep(1.0 / self.speed)
             content = tmux_capture()
+
+            # Detect broken agent subprocess mid-demo
+            if "No agent subprocess" in content:
+                log("WARNING: Agent subprocess disconnected!")
 
             if content != last_content:
                 last_content = content

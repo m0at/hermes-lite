@@ -22,6 +22,9 @@ _CORE_TOOLS = [
     "patch",
     "search_files",
     "todo",
+    "memory",
+    "skills_list",
+    "skill_view",
     "clarify",
     "delegate_task",
 ]
@@ -41,6 +44,16 @@ TOOLSETS: Dict[str, Dict[str, Any]] = {
     "todo": {
         "description": "Task planning and progress tracking for multi-step work",
         "tools": ["todo"],
+        "includes": [],
+    },
+    "memory": {
+        "description": "Persistent cross-session memory (global + project-level, shared across swarm agents)",
+        "tools": ["memory"],
+        "includes": [],
+    },
+    "skills": {
+        "description": "Browse and load reusable skill definitions for specialized tasks",
+        "tools": ["skills_list", "skill_view"],
         "includes": [],
     },
     "clarify": {

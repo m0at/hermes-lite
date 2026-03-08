@@ -42,13 +42,13 @@ Features outside the local coding use case were removed to keep the surface area
 | Image generation | Removed | fal.ai dependency |
 | TTS / voice | Removed | Not a coding workflow |
 | Slack, Discord, Telegram, WhatsApp | Removed | Separate concern from local agent |
-| Skills marketplace | Removed | Scope reduction |
+| Skills marketplace | Replaced | Rebuilt as local skill modules — agents load .md-based expertise on demand |
 | Mixture-of-agents | Removed | Scope reduction |
 | Home Assistant | Removed | Separate concern |
 | RL training pipeline | Removed | Research tool, not user-facing |
 | Cron scheduler | Removed | Not needed for interactive use |
 
-What remains: 9 focused tools (terminal, process, read_file, write_file, patch, search_files, todo, clarify, delegate_task) that cover the local coding workflow end to end.
+What remains: 12 focused tools (terminal, process, read_file, write_file, patch, search_files, todo, memory, skills_list, skill_view, clarify, delegate_task) that cover the local coding workflow end to end — including persistent cross-session memory and reusable skill modules.
 
 ---
 
@@ -106,9 +106,29 @@ JSON lines over stdin/stdout connecting the TUI to Python agent processes:
 
 This means the agent runs headless — any frontend can drive it. Multiple agents run simultaneously (one subprocess per pane). The TUI and agent can be on different machines (pipe over SSH). And testing uses the exact same protocol as real usage.
 
+### Persistent Memory (src/tools/memory_tool.py)
+
+Two-scope memory system that survives across sessions and context compression:
+
+- **Global** (`~/.hermes-lite/MEMORY.md`) — user preferences, patterns, conventions that persist across projects
+- **Project** (`.hermes/MEMORY.md` in cwd) — architecture decisions, key paths, project-specific context
+
+In multi-agent swarm mode, all agents share the same filesystem, so project memories are automatically visible to every agent. The architect saves context, and any sub-agent can read it — no IPC needed. File locking prevents write corruption from concurrent agents.
+
+Memory is also injected back into the conversation after context compression events, so agents never lose accumulated knowledge even in very long sessions.
+
+### Skills System (src/tools/skill_tools.py)
+
+Reusable expertise modules stored as `.md` files under `~/.hermes-lite/skills/`:
+
+- `skills_list` — browse available skills with descriptions
+- `skill_view` — load a skill's full instructions on demand
+
+Skills are indexed in the system prompt so the agent knows what's available. When a task matches a skill (e.g. building a frontend, testing a web app), the agent loads it and follows specialized instructions. Ships with 6 built-in skills: algorithmic-art, brand-guidelines, frontend-design, mcp-builder, theme-factory, webapp-testing.
+
 ### Parallel Tool Execution
 
-When the LLM returns multiple tool calls, independent tools run via ThreadPoolExecutor. Inline tools (todo, clarify) still run sequentially since they need conversation state or user interaction.
+When the LLM returns multiple tool calls, independent tools run via ThreadPoolExecutor. Inline tools (todo, memory, clarify, delegate_task) still run sequentially since they need conversation state or user interaction.
 
 ### Streaming & Interrupt Fixes
 
@@ -129,7 +149,7 @@ hermes-agent:                           hermes-lite:
        │                                       │
        │ (sequential)                          │ (parallel where possible)
        ▼                                       ▼
-  40+ Python tools                        9 focused tools
+  40+ Python tools                        12 focused tools
        │                                       │
        ▼                                       ▼
   Python SQLite (hermes_state.py)         Rust SessionDB (rusqlite + FTS5 + WAL)
@@ -142,19 +162,21 @@ hermes-agent:                           hermes-lite:
 | Metric | hermes-agent | hermes-lite |
 |--------|-------------|-------------|
 | Language | Pure Python | Python + 5,134 lines Rust |
-| Tools | 40+ | 9 (focused on coding) |
+| Tools | 40+ | 12 (focused on coding + memory + skills) |
 | Tool execution | Sequential | Parallel (ThreadPoolExecutor) |
 | State machine | while-loop | Formal Rust FSM (12 states, 5 actions, 10 response kinds) |
 | Session DB | Python SQLite | Rust rusqlite (FTS5, WAL, mmap) |
 | TUI | Python prompt_toolkit | Rust ratatui (1.8MB binary) |
 | Rust extension size | N/A | 4.1 MB (.dylib) |
 | Subprocess protocol | None | 19 message types (6 in, 13 out) |
-| Multi-agent | Child spawn (depth 2) | Full swarm — split/tab panes, @mentions, delegation, broadcast |
+| Multi-agent | Child spawn (depth 2) | Full swarm — split/tab panes, @mentions, delegation, broadcast, shared memory |
 | Messaging platforms | 5 | 0 (local only — by design) |
-| Unit tests | — | 1,062 |
+| Memory | In-session only | Persistent (global + project), shared across swarm agents |
+| Skills | Built-in only | Loadable skill modules (6 built-in, extensible) |
+| Unit tests | — | 1,065 |
 | Integration tests | — | 26 (prodpush, real LLM calls) |
-| Test code | — | 11,436 lines |
-| Python code | ~50,000+ lines | ~35,700 lines |
+| Test code | — | 11,700+ lines |
+| Python code | ~50,000+ lines | ~36,000+ lines |
 
 ---
 
@@ -206,7 +228,7 @@ All safety features from the original Hermes are preserved:
 - **API key redaction** — scrubs sk-*, ghp_*, xoxb-* and other secret patterns from logs
 - **Prompt injection scanning** — `hermes_rs.scan_context_content()` checks context files
 
-The reduced tool count (9 vs 40+) and local-only design naturally shrink the attack surface.
+The focused tool count (12 vs 40+) and local-only design naturally shrink the attack surface.
 
 ---
 
@@ -221,7 +243,9 @@ The TUI supports full multi-agent coordination:
 - `delegate_task` tool — agents programmatically assign work to other agents
 - Results automatically routed back to the delegating agent
 
-The demo shows an architect agent delegating tasks to 5 specialist agents (frontend, stylist, enhancer, security, QA) who work in parallel on a weather monitoring dashboard, then report results back. Each agent runs as an independent subprocess with its own session, model, and conversation history.
+**Shared memory** ties the swarm together: the architect saves project context to `.hermes/MEMORY.md` (e.g. app structure, agent roles, key decisions), and every sub-agent can read those memories automatically. No manual context passing needed — file-based sharing with locking handles it.
+
+The demo shows an architect agent delegating tasks to 5 specialist agents (frontend, stylist, enhancer, security, QA) who work in parallel on a weather monitoring dashboard. The architect saves project knowledge to shared memory, sub-agents read it, and results are routed back automatically. Each agent runs as an independent subprocess with its own session, model, and conversation history.
 
 ---
 
@@ -229,4 +253,4 @@ The demo shows an architect agent delegating tasks to 5 specialist agents (front
 
 hermes-agent inspired hermes-lite. The original is a broad AI agent platform; hermes-lite is a focused deep dive into what a local coding agent can be when you go all-in on performance, reliability, and multi-agent coordination.
 
-The core value: a model-agnostic system agent with a Rust-accelerated foundation that you can point at any LLM provider — Anthropic, OpenAI, open-source, local — and get a fast, auditable, multi-agent coding environment that runs entirely on your machine.
+The core value: a model-agnostic system agent with a Rust-accelerated foundation, persistent memory across sessions and agents, loadable skill modules, and a multi-agent swarm that shares context automatically. Point it at any LLM provider — Anthropic, OpenAI, open-source, local — and get a fast, auditable coding environment that runs entirely on your machine.

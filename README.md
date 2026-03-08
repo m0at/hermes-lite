@@ -11,6 +11,8 @@ hermes-lite takes the open-source Hermes Agent, strips it to a focused local cod
 - **Rust FSM** — PyO3 state machine replacing the Python conversation loop (12 states, 5 actions)
 - **Rust SessionDB** — rusqlite + FTS5 + WAL replacing the Python SQLite layer
 - **Native TUI** — ratatui terminal UI with multi-agent panes, @mentions, delegation, and inter-agent routing
+- **Persistent memory** — global + project-level memories shared across all swarm agents via filesystem
+- **Skills system** — reusable expertise modules agents load on demand for specialized tasks
 - **Subprocess protocol** — JSON-over-pipes connecting TUI to Python agent processes
 - **Integration test suite** — 26 live end-to-end tests driving the agent via subprocess protocol
 
@@ -29,8 +31,8 @@ maturin develop --release -m hermes_rs/Cargo.toml
 cargo build --release -p hermes_tui
 
 # Configure
-cp .env.example .env  # add your API key
-export ANTHROPIC_API_KEY=sk-ant-...
+mkdir -p ~/.hermes-lite
+echo "ANTHROPIC_API_KEY=sk-ant-..." > ~/.hermes-lite/.env
 ```
 
 Requires Python 3.11+ and Rust 1.75+.
@@ -64,6 +66,8 @@ The Rust TUI supports multiple agent panes, each running an independent subproce
 
 **Delegation:** Agents can programmatically delegate tasks to other agents in the swarm via the `delegate_task` tool. Results are routed back automatically.
 
+**Shared memory:** Project-level memories (`.hermes/MEMORY.md`) are shared across all agents in the swarm via the filesystem. One agent saves context, all agents can read it.
+
 ## Agent tools
 
 | Tool | Description |
@@ -75,6 +79,9 @@ The Rust TUI supports multiple agent panes, each running an independent subproce
 | `patch` | Find-replace with 8 fuzzy matching strategies + unified diff |
 | `search_files` | ripgrep-backed regex search and glob file find |
 | `todo` | Task planning with status tracking (survives context compression) |
+| `memory` | Persistent cross-session memory — global + project-level, shared across swarm agents |
+| `skills_list` | Browse available skill modules (frontend-design, webapp-testing, etc.) |
+| `skill_view` | Load a skill's full instructions for specialized tasks |
 | `clarify` | Ask user questions mid-task (rendered as modal dialog in TUI) |
 | `delegate_task` | Delegate work to another named agent in the swarm |
 
@@ -116,7 +123,7 @@ JSON lines over stdin/stdout between Rust TUI and Python agent:
 ## Testing
 
 ```bash
-# Unit tests (1062 tests)
+# Unit tests (1065 tests)
 python3 -m pytest tests/ -q
 
 # Live integration tests (26 tests, requires API key)
@@ -126,7 +133,7 @@ python3 -m pytest tests/prodpush/ -v -m prodpush --timeout=180
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `tests/agent/` | 12 modules | FSM, compression, prompt caching, tool parsing |
-| `tests/tools/` | 15 modules | All tools, approval patterns, fuzzy matching |
+| `tests/tools/` | 16 modules | All tools, memory, approval patterns, fuzzy matching |
 | `tests/hermes_cli/` | 3 modules | Config, model choices, CLI behavior |
 | `tests/prodpush/` | 26 tests | End-to-end via subprocess protocol |
 
@@ -151,4 +158,4 @@ python3 -m pytest tests/prodpush/ -v -m prodpush --timeout=180
 
 ## License
 
-Built on **Hermes** by [Nous Research](https://nousresearch.com) and **mini-swe-agent** v2.2.6 by Kilian Lieret & Carlos Jimenez (MIT). The Rust extensions, TUI, subprocess protocol, delegation system, and test suite are original to hermes-lite.
+Built on **Hermes** by [Nous Research](https://nousresearch.com) and **mini-swe-agent** v2.2.6 by Kilian Lieret & Carlos Jimenez (MIT). The Rust extensions, TUI, subprocess protocol, delegation system, memory system, skills system, and test suite are original to hermes-lite.

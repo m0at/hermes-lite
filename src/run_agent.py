@@ -2606,7 +2606,7 @@ class AIAgent:
                 if tc.function.name == "memory":
                     try:
                         args = json.loads(tc.function.arguments)
-                        flush_target = args.get("target", "memory")
+                        flush_target = args.get("target", "global")
                         from tools.memory_tool import memory_tool as _memory_tool
                         result = _memory_tool(
                             action=args.get("action"),
@@ -2618,7 +2618,7 @@ class AIAgent:
                         if self._honcho and flush_target == "user" and args.get("action") == "add":
                             self._honcho_save_user_observation(args.get("content", ""))
                         if not self.quiet_mode:
-                            print(f"  ◆ Memory flush: saved to {args.get('target', 'memory')}")
+                            print(f"  ◆ Memory flush: saved to {args.get('target', 'global')}")
                     except Exception as e:
                         logger.debug("Memory flush tool call failed: %s", e)
         except Exception as e:
@@ -2647,6 +2647,11 @@ class AIAgent:
         todo_snapshot = self._todo_store.format_for_injection()
         if todo_snapshot:
             compressed.append({"role": "user", "content": todo_snapshot})
+
+        if self._memory_store:
+            mem_snapshot = self._memory_store.format_for_injection()
+            if mem_snapshot:
+                compressed.append({"role": "user", "content": mem_snapshot})
 
         self._invalidate_system_prompt()
         new_system_prompt = self._build_system_prompt(system_message)
@@ -2867,7 +2872,7 @@ class AIAgent:
             if self.quiet_mode and self._show_display:
                 print(f"  {_get_cute_tool_message_impl('session_search', function_args, tool_duration, result=function_result)}")
         elif function_name == "memory":
-            target = function_args.get("target", "memory")
+            target = function_args.get("target", "global")
             from tools.memory_tool import memory_tool as _memory_tool
             function_result = _memory_tool(
                 action=function_args.get("action"),

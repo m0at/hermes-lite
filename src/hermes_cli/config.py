@@ -80,6 +80,15 @@ DEFAULT_CONFIG = {
         "summary_model": "claude-haiku-4-5",
     },
     
+    "memory": {
+        "memory_enabled": True,
+        "user_profile_enabled": True,
+        "memory_char_limit": 2200,
+        "user_char_limit": 1375,
+        "nudge_interval": 10,
+        "flush_min_turns": 6,
+    },
+
     "display": {
         "compact": False,
         "personality": "kawaii",

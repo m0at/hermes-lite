@@ -37,6 +37,8 @@ hermes-lite/
 │   │   ├── terminal_tool.py     # Shell execution orchestration
 │   │   ├── file_tools.py        # File read/write/search
 │   │   ├── todo_tool.py         # Task planning
+│   │   ├── memory_tool.py       # Persistent memory (global + project, swarm-shared)
+│   │   ├── skill_tools.py       # Browse and load reusable skill definitions
 │   │   ├── clarify_tool.py      # Interactive questions
 │   │   ├── delegate_tool.py     # Inter-agent task delegation
 │   │   ├── process_registry.py  # Background process management
@@ -63,7 +65,7 @@ hermes-lite/
 ├── vendor/
 │   └── mini-swe-agent/          # Vendored terminal execution backend (v2.2.6, MIT)
 │
-├── tests/                       # Test suite (1062 unit + 26 integration tests)
+├── tests/                       # Test suite (1065 unit + 26 integration tests)
 ├── docs/                        # Design documents
 ├── demo/                        # Demo scenarios and recording scripts
 └── README.md
