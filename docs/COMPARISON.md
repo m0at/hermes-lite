@@ -84,7 +84,7 @@ Every state transition is an explicit match arm. The Python side (`agent/loop_dr
 
 ### Native TUI (hermes_tui/)
 
-3,582 lines of Rust (ratatui 0.29 + crossterm 0.28):
+3,600 lines of Rust (ratatui 0.29 + crossterm 0.28):
 
 - **Multi-agent panes** — split/tab layouts, each pane runs an independent agent subprocess
 - **@mentions** — `@frontend refactor this`, `@all run tests`, `@reviewer! audit code` (pull response back)
@@ -126,6 +126,19 @@ Reusable expertise modules stored as `.md` files under `~/.hermes-lite/skills/`:
 
 Skills are indexed in the system prompt so the agent knows what's available. When a task matches a skill (e.g. building a frontend, testing a web app), the agent loads it and follows specialized instructions. Ships with 6 built-in skills: algorithmic-art, brand-guidelines, frontend-design, mcp-builder, theme-factory, webapp-testing.
 
+### Demo Recording System (demo/scripts/tui_demo_driver.py)
+
+Automated demo recording pipeline that drives the TUI through scripted scenarios:
+
+- **tmux automation** — sends keystrokes to a tmux session running the TUI, with instant-paste input
+- **13 scripted scenes** — skills browsing, app building, swarm deployment, delegation, shared memory, broadcast, shutdown
+- **Pre-flight validation** — verifies agent subprocess connects and API key is valid before recording starts
+- **Multi-source API key resolution** — sources from env vars, project `.env`, and `~/.hermes-lite/.env` with fallback chain
+- **asciinema recording** — captures terminal output to `.cast` format at configurable resolution (up to 200x55 for 1080p)
+- **Post-processing pipeline** — variable speed sections (3x base with 30x fast-forward for long waits), real-world elapsed timer overlay burned into the corner frame-by-frame via PIL, rendered to GIF (agg) and MP4 (ffmpeg)
+
+This isn't a screen recorder — it's a reproducible demo generator. Same script, same scenes, every time.
+
 ### Parallel Tool Execution
 
 When the LLM returns multiple tool calls, independent tools run via ThreadPoolExecutor. Inline tools (todo, memory, clarify, delegate_task) still run sequentially since they need conversation state or user interaction.
@@ -161,7 +174,7 @@ hermes-agent:                           hermes-lite:
 
 | Metric | hermes-agent | hermes-lite |
 |--------|-------------|-------------|
-| Language | Pure Python | Python + 5,134 lines Rust |
+| Language | Pure Python | Python + 5,152 lines Rust |
 | Tools | 40+ | 12 (focused on coding + memory + skills) |
 | Tool execution | Sequential | Parallel (ThreadPoolExecutor) |
 | State machine | while-loop | Formal Rust FSM (12 states, 5 actions, 10 response kinds) |

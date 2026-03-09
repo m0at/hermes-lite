@@ -120,6 +120,26 @@ JSON lines over stdin/stdout between Rust TUI and Python agent:
 
 5 actions: `Continue`, `Break`, `Retry`, `Nudge`, `Fail`
 
+## Demo recording
+
+The `demo/scripts/tui_demo_driver.py` automates full TUI demo recordings — 13 scripted scenes driven via tmux keystrokes, recorded with asciinema, and rendered to MP4:
+
+```bash
+python3 demo/scripts/tui_demo_driver.py --record      # full recording
+python3 demo/scripts/tui_demo_driver.py --dry-run      # preview scenes
+python3 demo/scripts/tui_demo_driver.py --scene 3      # start from scene 3
+python3 demo/scripts/tui_demo_driver.py --fast          # 2x speed
+```
+
+Features:
+- **Instant-paste input** — prompts appear immediately (no character-by-character typing)
+- **Auto API key sourcing** — pulls from env, project `.env`, or `~/.hermes-lite/.env`
+- **Pre-flight checks** — verifies agent subprocess connects before recording starts
+- **Post-processing** — variable speed sections (3x/30x) with real-world elapsed timer overlay in the corner
+- **Multiple output formats** — `.cast` (asciinema), `.gif` (via agg), `.mp4` (via ffmpeg)
+
+The demo showcases: skill loading, single-agent app building, multi-agent swarm deployment (6 agents), inter-agent delegation, shared memory writes/reads, broadcast, and graceful shutdown.
+
 ## Testing
 
 ```bash

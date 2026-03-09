@@ -30,7 +30,7 @@ HERMES_TUI = os.path.join(_REPO_ROOT, "target", "release", "hermes-tui")
 HERMES_CLI = os.path.join(_REPO_ROOT, ".venv", "bin", "hermes-lite")
 
 TMUX_SESSION = "hermes-demo"
-COLS, ROWS = 120, 40
+COLS, ROWS = 200, 55
 
 # Typing speed
 CHAR_DELAY = 0.045
@@ -95,6 +95,12 @@ _BUILD_PROMPT = (
     "OVERALL STYLE: Everything JetBrains Mono. Custom thin scrollbar (#333 thumb, transparent track). "
     "No default margins/padding on body. Smooth transitions on hover states. "
     "Cards hover: slight translateY(-2px) and brighter border. "
+    "CARD CLICK INTERACTION: clicking a card expands it inline — show a detail section below the severity bar with: "
+    "a 3-line ASCII mini-graph of severity trend using block chars (▁▂▃▅▇), "
+    "'Last Updated' timestamp, 'Status: ACTIVE' in blinking red for critical / amber for severe / green for moderate, "
+    "and a 'View Full Report' button (styled, does nothing). "
+    "Clicking again collapses it. Use CSS max-height transition for smooth expand/collapse animation. "
+    "Also clicking a card populates the chat input with 'Tell me about [event name]' so the chat panel responds contextually. "
     "Make it look like a real military/ops command center, dark and serious."
 )
 
@@ -416,8 +422,22 @@ class DemoDriver:
             tmux_kill()
 
         # Pass ANTHROPIC_API_KEY through to tmux session so agent subprocess inherits it
+        # Source from: env var > project .env > ~/.hermes-lite/.env
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        env_prefix = f"ANTHROPIC_API_KEY={api_key} " if api_key else ""
+        if not api_key:
+            for env_path in [os.path.join(_REPO_ROOT, ".env"), os.path.expanduser("~/.hermes-lite/.env")]:
+                if os.path.exists(env_path):
+                    with open(env_path) as f:
+                        for line in f:
+                            if line.startswith("ANTHROPIC_API_KEY="):
+                                api_key = line.strip().split("=", 1)[1]
+                                break
+                if api_key:
+                    break
+        if not api_key:
+            print("FATAL: No ANTHROPIC_API_KEY found in env, project .env, or ~/.hermes-lite/.env", file=sys.stderr)
+            sys.exit(1)
+        env_prefix = f"ANTHROPIC_API_KEY={api_key} "
 
         tmux("new-session", "-d", "-s", TMUX_SESSION,
              "-x", str(COLS), "-y", str(ROWS),
@@ -463,17 +483,10 @@ class DemoDriver:
             pass
 
     def type_text(self, text: str):
-        """Type character by character with natural jitter via tmux."""
-        for ch in text:
-            # tmux send-keys needs special handling for some chars
-            if ch == ';':
-                tmux_send_keys('-l', ch)
-            elif ch == ' ':
-                tmux_send_keys('Space')
-            else:
-                tmux_send_keys('-l', ch)
-            delay = CHAR_DELAY + random.uniform(-CHAR_JITTER, CHAR_JITTER)
-            self._delay(max(0.01, delay))
+        """Instant-paste text into tmux (no character-by-character typing)."""
+        # Replace newlines with spaces to prevent tmux interpreting them as Enter
+        clean = text.replace('\n', ' ')
+        tmux_send_keys('-l', clean)
 
     def send_line(self, text: str):
         """Type text then press Enter."""
@@ -632,7 +645,7 @@ def record_session(driver, scenes, output_dir):
             log("Rendering to GIF with agg...")
             r = subprocess.run(
                 ["agg", cast_file, gif_file,
-                 "--theme", "monokai", "--font-size", "16", "--fps-cap", "30"],
+                 "--theme", "monokai", "--font-size", "18", "--fps-cap", "30"],
                 capture_output=True, text=True
             )
             if r.returncode == 0 and os.path.exists(gif_file):

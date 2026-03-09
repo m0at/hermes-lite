@@ -38,5 +38,8 @@ wandb/
 *.ppk
 *.pem
 
+# Project memory (generated at runtime)
+.hermes/
+
 # Node (for demo projects)
 node_modules/
