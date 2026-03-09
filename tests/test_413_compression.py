@@ -64,7 +64,6 @@ def agent():
             api_key="test-key-1234567890",
             quiet_mode=True,
             skip_context_files=True,
-            skip_memory=True,
         )
         a._chat_completion_mock = MagicMock()
         a._chat_completion = a._chat_completion_mock

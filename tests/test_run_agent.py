@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
 
 from run_agent import AIAgent
+from hermes_agent import HermesLiteAgent
 from agent.prompt_builder import DEFAULT_AGENT_IDENTITY, PLATFORM_HINTS
 
 
@@ -47,7 +48,6 @@ def agent():
             api_key="test-key-1234567890",
             quiet_mode=True,
             skip_context_files=True,
-            skip_memory=True,
         )
         # Mock _chat_completion so tests can set .return_value / .side_effect
         a._chat_completion_mock = MagicMock()
@@ -62,7 +62,7 @@ def agent_with_memory_tool():
         patch("run_agent.get_tool_definitions", return_value=_make_tool_defs("terminal", "memory")),
         patch("run_agent.check_toolset_requirements", return_value={}),
     ):
-        a = AIAgent(
+        a = HermesLiteAgent(
             api_key="test-key-1234567890",
             quiet_mode=True,
             skip_context_files=True,
@@ -292,7 +292,7 @@ class TestInit:
                 model="anthropic/claude-sonnet-4-20250514",
                 quiet_mode=True,
                 skip_context_files=True,
-                skip_memory=True,
+
             )
             assert a._use_prompt_caching is True
 
@@ -308,7 +308,7 @@ class TestInit:
                 model="openai/gpt-4o",
                 quiet_mode=True,
                 skip_context_files=True,
-                skip_memory=True,
+
             )
             assert a._use_prompt_caching is False
 
@@ -326,7 +326,7 @@ class TestInit:
                 base_url="http://localhost:8080/v1",
                 quiet_mode=True,
                 skip_context_files=True,
-                skip_memory=True,
+
             )
             assert a._use_prompt_caching is False
 
@@ -342,7 +342,7 @@ class TestInit:
                 api_key="test-key-1234567890",
                 quiet_mode=True,
                 skip_context_files=True,
-                skip_memory=True,
+
             )
             assert a.valid_tool_names == {"web_search", "terminal"}
 
@@ -357,7 +357,7 @@ class TestInit:
                 api_key="test-key-1234567890",
                 quiet_mode=True,
                 skip_context_files=True,
-                skip_memory=True,
+
             )
             # Format: YYYYMMDD_HHMMSS_<6 hex chars>
             assert re.match(r"^\d{8}_\d{6}_[0-9a-f]{6}$", a.session_id), (
@@ -459,11 +459,11 @@ class TestInvalidateSystemPrompt:
         agent._invalidate_system_prompt()
         assert agent._cached_system_prompt is None
 
-    def test_reloads_memory_store(self, agent):
+    def test_reloads_memory_store(self, agent_with_memory_tool):
         mock_store = MagicMock()
-        agent._memory_store = mock_store
-        agent._cached_system_prompt = "cached"
-        agent._invalidate_system_prompt()
+        agent_with_memory_tool._memory_store = mock_store
+        agent_with_memory_tool._cached_system_prompt = "cached"
+        agent_with_memory_tool._invalidate_system_prompt()
         mock_store.load_from_disk.assert_called_once()
 
 

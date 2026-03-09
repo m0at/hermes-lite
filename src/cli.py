@@ -326,7 +326,7 @@ from rich.table import Table
 import fire
 
 # Import the agent and tool systems
-from run_agent import AIAgent
+from hermes_agent import HermesLiteAgent
 from model_tools import get_tool_definitions, get_toolset_for_tool
 
 # Extracted CLI modules (Phase 3)
@@ -975,7 +975,7 @@ class HermesCLI:
                 pass
         
         try:
-            self.agent = AIAgent(
+            self.agent = HermesLiteAgent(
                 model=self.model,
                 api_key=self.api_key,
                 base_url=self.base_url,

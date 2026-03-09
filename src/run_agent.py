@@ -94,7 +94,7 @@ from agent.model_metadata import (
 )
 from agent.context_compressor import ContextCompressor
 from agent.prompt_caching import apply_anthropic_cache_control
-from agent.prompt_builder import build_skills_system_prompt, build_context_files_prompt
+from agent.prompt_builder import build_context_files_prompt
 from agent.display import (
     KawaiiSpinner, build_tool_preview as _build_tool_preview,
     get_cute_tool_message as _get_cute_tool_message_impl,
@@ -302,9 +302,7 @@ class AIAgent:
         prefill_messages: List[Dict[str, Any]] = None,
         platform: str = None,
         skip_context_files: bool = False,
-        skip_memory: bool = False,
         session_db=None,
-        honcho_session_key: str = None,
     ):
         """
         Initialize the AI Agent.
@@ -344,8 +342,6 @@ class AIAgent:
             skip_context_files (bool): If True, skip auto-injection of SOUL.md, AGENTS.md, and .cursorrules
                 into the system prompt. Use this for batch processing and data generation to avoid
                 polluting trajectories with user-specific persona or project instructions.
-            honcho_session_key (str): Session key for Honcho integration (e.g., "telegram:123456" or CLI session_id).
-                When provided and Honcho is enabled in config, enables persistent cross-session user modeling.
         """
         self.model = model
         self.max_iterations = max_iterations
@@ -578,78 +574,18 @@ class AIAgent:
         from tools.todo_tool import TodoStore
         self._todo_store = TodoStore()
         
-        # Persistent memory (MEMORY.md + USER.md) -- loaded from disk
+        # ── Extension point stubs (overridden by HermesLiteAgent) ──
         self._memory_store = None
         self._memory_enabled = False
         self._user_profile_enabled = False
-        self._memory_nudge_interval = 10
-        self._memory_flush_min_turns = 6
-        if not skip_memory:
-            try:
-                from hermes_cli.config import load_config as _load_mem_config
-                mem_config = _load_mem_config().get("memory", {})
-                self._memory_enabled = mem_config.get("memory_enabled", False)
-                self._user_profile_enabled = mem_config.get("user_profile_enabled", False)
-                self._memory_nudge_interval = int(mem_config.get("nudge_interval", 10))
-                self._memory_flush_min_turns = int(mem_config.get("flush_min_turns", 6))
-                if self._memory_enabled or self._user_profile_enabled:
-                    from tools.memory_tool import MemoryStore
-                    self._memory_store = MemoryStore(
-                        memory_char_limit=mem_config.get("memory_char_limit", 2200),
-                        user_char_limit=mem_config.get("user_char_limit", 1375),
-                    )
-                    self._memory_store.load_from_disk()
-            except Exception:
-                pass  # Memory is optional -- don't break agent init
-        
-        # Honcho AI-native memory (cross-session user modeling)
-        # Reads ~/.honcho/config.json as the single source of truth.
-        self._honcho = None  # HonchoSessionManager | None
-        self._honcho_session_key = honcho_session_key
-        if not skip_memory:
-            try:
-                from honcho_integration.client import HonchoClientConfig, get_honcho_client
-                hcfg = HonchoClientConfig.from_global_config()
-                if hcfg.enabled and hcfg.api_key:
-                    from honcho_integration.session import HonchoSessionManager
-                    client = get_honcho_client(hcfg)
-                    self._honcho = HonchoSessionManager(
-                        honcho=client,
-                        config=hcfg,
-                        context_tokens=hcfg.context_tokens,
-                    )
-                    # Resolve session key: explicit arg > global sessions map > fallback
-                    if not self._honcho_session_key:
-                        self._honcho_session_key = (
-                            hcfg.resolve_session_name()
-                            or "hermes-default"
-                        )
-                    # Ensure session exists in Honcho
-                    self._honcho.get_or_create(self._honcho_session_key)
-                    # Inject session context into the honcho tool module
-                    from tools.honcho_tools import set_session_context
-                    set_session_context(self._honcho, self._honcho_session_key)
-                    logger.info(
-                        "Honcho active (session: %s, user: %s, workspace: %s)",
-                        self._honcho_session_key, hcfg.peer_name, hcfg.workspace_id,
-                    )
-                else:
-                    if not hcfg.enabled:
-                        logger.debug("Honcho disabled in global config")
-                    elif not hcfg.api_key:
-                        logger.debug("Honcho enabled but no API key configured")
-            except Exception as e:
-                logger.debug("Honcho init failed (non-fatal): %s", e)
-                self._honcho = None
-
-        # Skills config: nudge interval for skill creation reminders
-        self._skill_nudge_interval = 15
-        try:
-            from hermes_cli.config import load_config as _load_skills_config
-            skills_config = _load_skills_config().get("skills", {})
-            self._skill_nudge_interval = int(skills_config.get("creation_nudge_interval", 15))
-        except Exception:
-            pass
+        self._memory_nudge_interval = 0
+        self._memory_flush_min_turns = 0
+        self._turns_since_memory = 0
+        self._skill_nudge_interval = 0
+        self._iters_since_skill = 0
+        self._honcho = None
+        self._honcho_session_key = None
+        self._honcho_context = ""
         
         # Initialize context compressor for automatic context management
         # Compresses conversation when approaching model's context limit
@@ -1376,65 +1312,19 @@ class AIAgent:
         """Check if an interrupt has been requested."""
         return self._interrupt_requested
 
-    # ── Honcho integration helpers ──
+    # ── Extension point stubs (overridden by HermesLiteAgent) ──
 
     def _honcho_prefetch(self, user_message: str) -> str:
-        """Fetch user context from Honcho for system prompt injection.
-
-        Returns a formatted context block, or empty string if unavailable.
-        """
-        if not self._honcho or not self._honcho_session_key:
-            return ""
-        try:
-            ctx = self._honcho.get_prefetch_context(self._honcho_session_key, user_message)
-            if not ctx:
-                return ""
-            parts = []
-            rep = ctx.get("representation", "")
-            card = ctx.get("card", "")
-            if rep:
-                parts.append(rep)
-            if card:
-                parts.append(card)
-            if not parts:
-                return ""
-            return "# Honcho User Context\n" + "\n\n".join(parts)
-        except Exception as e:
-            logger.debug("Honcho prefetch failed (non-fatal): %s", e)
-            return ""
-
-    def _honcho_save_user_observation(self, content: str) -> str:
-        """Route a memory tool target=user add to Honcho.
-
-        Sends the content as a user peer message so Honcho's reasoning
-        model can incorporate it into the user representation.
-        """
-        if not content or not content.strip():
-            return json.dumps({"success": False, "error": "Content cannot be empty."})
-        try:
-            session = self._honcho.get_or_create(self._honcho_session_key)
-            session.add_message("user", f"[observation] {content.strip()}")
-            self._honcho.save(session)
-            return json.dumps({
-                "success": True,
-                "target": "user",
-                "message": "Saved to Honcho user model.",
-            })
-        except Exception as e:
-            logger.debug("Honcho user observation failed: %s", e)
-            return json.dumps({"success": False, "error": f"Honcho save failed: {e}"})
+        return ""
 
     def _honcho_sync(self, user_content: str, assistant_content: str) -> None:
-        """Sync the user/assistant message pair to Honcho."""
-        if not self._honcho or not self._honcho_session_key:
-            return
-        try:
-            session = self._honcho.get_or_create(self._honcho_session_key)
-            session.add_message("user", user_content)
-            session.add_message("assistant", assistant_content)
-            self._honcho.save(session)
-        except Exception as e:
-            logger.debug("Honcho sync failed (non-fatal): %s", e)
+        pass
+
+    def _honcho_save_user_observation(self, content: str) -> str:
+        return json.dumps({"success": False, "error": "Honcho not enabled."})
+
+    def flush_memories(self, messages: list = None, min_turns: int = None):
+        pass
 
     def _build_system_prompt(self, system_message: str = None) -> str:
         """
@@ -1474,22 +1364,6 @@ class AIAgent:
         if system_message is not None:
             prompt_parts.append(system_message)
 
-        if self._memory_store:
-            if self._memory_enabled:
-                mem_block = self._memory_store.format_for_system_prompt("memory")
-                if mem_block:
-                    prompt_parts.append(mem_block)
-            # USER.md is always included when enabled -- Honcho prefetch is additive.
-            if self._user_profile_enabled:
-                user_block = self._memory_store.format_for_system_prompt("user")
-                if user_block:
-                    prompt_parts.append(user_block)
-
-        has_skills_tools = any(name in self.valid_tool_names for name in ['skills_list', 'skill_view', 'skill_manage'])
-        skills_prompt = build_skills_system_prompt() if has_skills_tools else ""
-        if skills_prompt:
-            prompt_parts.append(skills_prompt)
-
         if not self.skip_context_files:
             context_files_prompt = build_context_files_prompt()
             if context_files_prompt:
@@ -1514,8 +1388,6 @@ class AIAgent:
         so the rebuilt prompt captures any writes from this session.
         """
         self._cached_system_prompt = None
-        if self._memory_store:
-            self._memory_store.load_from_disk()
 
     def _responses_tools(self, tools: Optional[List[Dict[str, Any]]] = None) -> Optional[List[Dict[str, Any]]]:
         """Convert chat-completions tool schemas to Responses function-tool schemas."""
@@ -2495,163 +2367,17 @@ class AIAgent:
 
         return msg
 
-    def flush_memories(self, messages: list = None, min_turns: int = None):
-        """Give the model one turn to persist memories before context is lost.
-
-        Called before compression, session reset, or CLI exit. Injects a flush
-        message, makes one API call, executes any memory tool calls, then
-        strips all flush artifacts from the message list.
-
-        Args:
-            messages: The current conversation messages. If None, uses
-                      self._session_messages (last run_conversation state).
-            min_turns: Minimum user turns required to trigger the flush.
-                       None = use config value (flush_min_turns).
-                       0 = always flush (used for compression).
-        """
-        if self._memory_flush_min_turns == 0 and min_turns is None:
-            return
-        if "memory" not in self.valid_tool_names or not self._memory_store:
-            return
-        effective_min = min_turns if min_turns is not None else self._memory_flush_min_turns
-        if self._user_turn_count < effective_min:
-            return
-
-        if messages is None:
-            messages = getattr(self, '_session_messages', None)
-        if not messages or len(messages) < 3:
-            return
-
-        flush_content = (
-            "[System: The session is being compressed. "
-            "Please save anything worth remembering to your memories.]"
-        )
-        _sentinel = f"__flush_{id(self)}_{time.monotonic()}"
-        flush_msg = {"role": "user", "content": flush_content, "_flush_sentinel": _sentinel}
-        messages.append(flush_msg)
-
-        try:
-            # Build API messages for the flush call
-            api_messages = []
-            for msg in messages:
-                api_msg = msg.copy()
-                if msg.get("role") == "assistant":
-                    reasoning = msg.get("reasoning")
-                    if reasoning:
-                        api_msg["reasoning_content"] = reasoning
-                api_msg.pop("reasoning", None)
-                api_msg.pop("finish_reason", None)
-                api_msg.pop("_flush_sentinel", None)
-                api_messages.append(api_msg)
-
-            if self._cached_system_prompt:
-                api_messages = [{"role": "system", "content": self._cached_system_prompt}] + api_messages
-
-            # Make one API call with only the memory tool available
-            memory_tool_def = None
-            for t in (self.tools or []):
-                if t.get("function", {}).get("name") == "memory":
-                    memory_tool_def = t
-                    break
-
-            if not memory_tool_def:
-                messages.pop()  # remove flush msg
-                return
-
-            # Use auxiliary client for the flush call when available --
-            # it's cheaper and avoids Codex Responses API incompatibility.
-            from agent.auxiliary_client import get_text_auxiliary_client
-            aux_client, aux_model = get_text_auxiliary_client()
-
-            if aux_client:
-                api_kwargs = {
-                    "model": aux_model,
-                    "messages": api_messages,
-                    "tools": [memory_tool_def],
-                    "temperature": 0.3,
-                    "max_tokens": 5120,
-                }
-                response = aux_client.chat.completions.create(**api_kwargs, timeout=30.0)
-            elif self.api_mode == "codex_responses":
-                # No auxiliary client -- use the Codex Responses path directly
-                codex_kwargs = self._build_api_kwargs(api_messages)
-                codex_kwargs["tools"] = self._responses_tools([memory_tool_def])
-                codex_kwargs["temperature"] = 0.3
-                if "max_output_tokens" in codex_kwargs:
-                    codex_kwargs["max_output_tokens"] = 5120
-                response = self._run_codex_stream(codex_kwargs)
-            else:
-                api_kwargs = {
-                    "model": self.model,
-                    "messages": api_messages,
-                    "tools": [memory_tool_def],
-                    "temperature": 0.3,
-                    **self._max_tokens_param(5120),
-                }
-                self._apply_qwen_params(api_kwargs)
-                response = self._chat_completion(**api_kwargs, timeout=30.0, _skip_stream=True)
-
-            # Extract tool calls from the response, handling both API formats
-            tool_calls = []
-            if self.api_mode == "codex_responses" and not aux_client:
-                assistant_msg, _ = self._normalize_codex_response(response)
-                if assistant_msg and assistant_msg.tool_calls:
-                    tool_calls = assistant_msg.tool_calls
-            elif hasattr(response, "choices") and response.choices:
-                assistant_message = response.choices[0].message
-                if assistant_message.tool_calls:
-                    tool_calls = assistant_message.tool_calls
-
-            for tc in tool_calls:
-                if tc.function.name == "memory":
-                    try:
-                        args = json.loads(tc.function.arguments)
-                        flush_target = args.get("target", "global")
-                        from tools.memory_tool import memory_tool as _memory_tool
-                        result = _memory_tool(
-                            action=args.get("action"),
-                            target=flush_target,
-                            content=args.get("content"),
-                            old_text=args.get("old_text"),
-                            store=self._memory_store,
-                        )
-                        if self._honcho and flush_target == "user" and args.get("action") == "add":
-                            self._honcho_save_user_observation(args.get("content", ""))
-                        if not self.quiet_mode:
-                            print(f"  ◆ Memory flush: saved to {args.get('target', 'global')}")
-                    except Exception as e:
-                        logger.debug("Memory flush tool call failed: %s", e)
-        except Exception as e:
-            logger.debug("Memory flush API call failed: %s", e)
-        finally:
-            # Strip flush artifacts: remove everything from the flush message onward.
-            # Use sentinel marker instead of identity check for robustness.
-            while messages and messages[-1].get("_flush_sentinel") != _sentinel:
-                messages.pop()
-                if not messages:
-                    break
-            if messages and messages[-1].get("_flush_sentinel") == _sentinel:
-                messages.pop()
-
     def _compress_context(self, messages: list, system_message: str, *, approx_tokens: int = None) -> tuple:
         """Compress conversation context and split the session in SQLite.
 
         Returns:
             (compressed_messages, new_system_prompt) tuple
         """
-        # Pre-compression memory flush: let the model save memories before they're lost
-        self.flush_memories(messages, min_turns=0)
-
         compressed = self.context_compressor.compress(messages, current_tokens=approx_tokens)
 
         todo_snapshot = self._todo_store.format_for_injection()
         if todo_snapshot:
             compressed.append({"role": "user", "content": todo_snapshot})
-
-        if self._memory_store:
-            mem_snapshot = self._memory_store.format_for_injection()
-            if mem_snapshot:
-                compressed.append({"role": "user", "content": mem_snapshot})
 
         self._invalidate_system_prompt()
         new_system_prompt = self._build_system_prompt(system_message)
@@ -2681,7 +2407,7 @@ class AIAgent:
         return compressed, new_system_prompt
 
     # Tools that access agent state and must run sequentially in the main loop
-    _INLINE_TOOLS = frozenset({"todo", "session_search", "memory", "clarify", "delegate_task"})
+    _INLINE_TOOLS = frozenset({"todo", "session_search", "clarify", "delegate_task"})
 
     def _execute_tool_calls(self, assistant_message, messages: list, effective_task_id: str) -> None:
         """Execute tool calls from the assistant message and append results to messages.
@@ -2811,9 +2537,7 @@ class AIAgent:
         function_name = tool_call.function.name
 
         # Reset nudge counters when the relevant tool is actually used
-        if function_name == "memory":
-            self._turns_since_memory = 0
-        elif function_name == "skill_manage":
+        if function_name == "skill_manage":
             self._iters_since_skill = 0
 
         try:
@@ -2871,22 +2595,6 @@ class AIAgent:
             tool_duration = time.time() - tool_start_time
             if self.quiet_mode and self._show_display:
                 print(f"  {_get_cute_tool_message_impl('session_search', function_args, tool_duration, result=function_result)}")
-        elif function_name == "memory":
-            target = function_args.get("target", "global")
-            from tools.memory_tool import memory_tool as _memory_tool
-            function_result = _memory_tool(
-                action=function_args.get("action"),
-                target=target,
-                content=function_args.get("content"),
-                old_text=function_args.get("old_text"),
-                store=self._memory_store,
-            )
-            # Also send user observations to Honcho when active
-            if self._honcho and target == "user" and function_args.get("action") == "add":
-                self._honcho_save_user_observation(function_args.get("content", ""))
-            tool_duration = time.time() - tool_start_time
-            if self.quiet_mode and self._show_display:
-                print(f"  {_get_cute_tool_message_impl('memory', function_args, tool_duration, result=function_result)}")
         elif function_name == "clarify":
             from tools.clarify_tool import clarify_tool as _clarify_tool
             function_result = _clarify_tool(
@@ -4793,7 +4501,8 @@ def _run_subprocess_mode():
     stdin_reader.start()
 
     # Create agent in quiet mode to suppress terminal output
-    agent = AIAgent(quiet_mode=True)
+    from hermes_agent import HermesLiteAgent
+    agent = HermesLiteAgent(quiet_mode=True)
     agent._subprocess_mode = True
     agent._protocol = protocol
     # Suppress ALL non-JSON stdout: spinners, print statements, etc.
