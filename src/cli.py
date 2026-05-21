@@ -1921,7 +1921,8 @@ class HermesCLI:
 
         print()
         print(f"  Context Window \u2014 {self.model}")
-        print(f"  {'\u2500' * 56}")
+        rule = "\u2500" * 56
+        print(f"  {rule}")
         self.console.print(f"  [{color}]{bar_filled}[/][dim]{bar_empty}[/] {pct_used:.1f}%")
         print()
         print(f"  Used:      {used_tokens:>8,} tokens")
