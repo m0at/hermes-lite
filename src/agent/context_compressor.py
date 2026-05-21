@@ -168,12 +168,11 @@ Write only the summary, starting with "[CONTEXT SUMMARY]:" prefix."""
         return summary
 
     def _get_fallback_client(self):
-        """Try to build a fallback client from the user's local endpoint config.
+        """Build a fallback client from the user's local OpenAI-compatible endpoint.
 
-        When the primary auxiliary client fails, this creates a litellm client
-        using OPENAI_BASE_URL so compression can still produce a real summary.
-
-        Returns (client, model) or (None, None).
+        When the primary auxiliary client fails, route through OPENAI_BASE_URL so
+        compression can still produce a real summary. Returns (client, model) or
+        (None, None).
         """
         custom_base = os.getenv("OPENAI_BASE_URL")
         custom_key = os.getenv("OPENAI_API_KEY")
@@ -186,8 +185,8 @@ Write only the summary, starting with "[CONTEXT SUMMARY]:" prefix."""
 
         model = os.getenv("LLM_MODEL") or os.getenv("OPENAI_MODEL") or self.model
         try:
-            from agent.auxiliary_client import LitellmAuxiliaryClient
-            client = LitellmAuxiliaryClient(model=model, api_key=custom_key, api_base=custom_base)
+            from agent.auxiliary_client import AuxiliaryClient
+            client = AuxiliaryClient(model=model, api_key=custom_key, api_base=custom_base)
             logger.debug("Built fallback auxiliary client: %s via %s", model, custom_base)
             return client, model
         except Exception as exc:

@@ -1214,4 +1214,4 @@ The migration is three steps:
 2. **Run migration shim** in `model_tools.py` — wraps every `ToolEntry` as a `Skill` object and registers it in `skill_registry`. Zero changes to individual tool files.
 3. **Swap the agent loop** in `run_agent.py` — replace the inner `while` loop with `AgentLoop.run()`. The outer class, CLI, config, and prompt assembly are all untouched.
 
-The model skill (`ModelSkill`) wraps the same `litellm` / OpenAI client already used in `run_agent.py`. The `ContextCompressor`, `SessionDB`, `TodoStore`, and `WorkingMemory` instances become constructor arguments to the skill classes — dependency injection, no globals beyond the registry singleton.
+The model skill (`ModelSkill`) wraps the same `agent.llm_client.completion` entry point already used in `run_agent.py` (Anthropic SDK for Claude, OpenAI SDK for OpenAI-compatible endpoints). The `ContextCompressor`, `SessionDB`, `TodoStore`, and `WorkingMemory` instances become constructor arguments to the skill classes — dependency injection, no globals beyond the registry singleton.

@@ -83,4 +83,4 @@ class TestProviderResolution:
     def test_model_is_string(self):
         cli = _make_cli()
         assert isinstance(cli.model, str)
-        assert isinstance(cli.model, str) and '/' in cli.model
+        assert cli.model.strip() != ""

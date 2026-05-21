@@ -900,11 +900,12 @@ class HermesCLI:
         resolved_provider = runtime.get("provider", "anthropic")
         resolved_api_mode = runtime.get("api_mode", self.api_mode)
         is_local = resolved_provider == "local"
-        is_litellm = resolved_provider == "anthropic"  # litellm handles routing
-        if not is_local and not is_litellm and (not isinstance(api_key, str) or not api_key):
+        # Anthropic uses the official SDK directly; base_url is implicit.
+        is_anthropic = resolved_provider == "anthropic"
+        if not is_local and not is_anthropic and (not isinstance(api_key, str) or not api_key):
             self.console.print("[bold red]Provider resolver returned an empty API key.[/]")
             return False
-        if not is_litellm and (not isinstance(base_url, str) or not base_url):
+        if not is_anthropic and (not isinstance(base_url, str) or not base_url):
             self.console.print("[bold red]Provider resolver returned an empty base URL.[/]")
             return False
 
@@ -1920,7 +1921,8 @@ class HermesCLI:
 
         print()
         print(f"  Context Window \u2014 {self.model}")
-        print(f"  {'\u2500' * 56}")
+        rule = "\u2500" * 56
+        print(f"  {rule}")
         self.console.print(f"  [{color}]{bar_filled}[/][dim]{bar_empty}[/] {pct_used:.1f}%")
         print()
         print(f"  Used:      {used_tokens:>8,} tokens")
