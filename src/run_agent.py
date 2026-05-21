@@ -4418,9 +4418,15 @@ def _run_subprocess_mode():
     stdin_reader = StdinReader()
     stdin_reader.start()
 
-    # Create agent in quiet mode to suppress terminal output
+    # Create agent in quiet mode to suppress terminal output. Honor
+    # HERMES_MODEL when set so a host (e.g. the Rust agent_manager) can
+    # hand a BYO Claude model through to the subprocess.
     from hermes_agent import HermesLiteAgent
-    agent = HermesLiteAgent(quiet_mode=True)
+    _agent_kwargs = {"quiet_mode": True}
+    _env_model = os.getenv("HERMES_MODEL", "").strip()
+    if _env_model:
+        _agent_kwargs["model"] = _env_model
+    agent = HermesLiteAgent(**_agent_kwargs)
     agent._subprocess_mode = True
     agent._protocol = protocol
     # Suppress ALL non-JSON stdout: spinners, print statements, etc.
