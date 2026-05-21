@@ -1,7 +1,8 @@
+anthropic>=0.78
 fire
 httpx
 jinja2
-litellm>=1.75.5
+openai>=2.0
 
 platformdirs
 prompt_toolkit

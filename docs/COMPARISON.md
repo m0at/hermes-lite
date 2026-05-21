@@ -20,7 +20,7 @@ Both approaches are valid. hermes-agent gives you breadth; hermes-lite gives you
 
 The core agent engine from Hermes is excellent and we built on top of it:
 
-- **LLM calls via litellm** — any provider works (Anthropic, OpenAI, OpenRouter, local models)
+- **LLM calls via the Anthropic SDK (Claude) or OpenAI SDK (OpenAI/OpenRouter/local) directly** — no litellm
 - **Terminal execution** with dangerous-command approval (30 safety patterns)
 - **File operations** — read, write, patch (8 fuzzy matching strategies), search (ripgrep-backed)
 - **Context compression** — auto-summarization at 85% of context window
@@ -195,18 +195,17 @@ hermes-agent:                           hermes-lite:
 
 ## Model Agnostic
 
-hermes-lite works with any LLM provider through litellm:
+hermes-lite calls Claude via the Anthropic SDK directly, and everything else
+(OpenAI, OpenRouter, vLLM/rvLLM, and any OpenAI-compatible endpoint) via the
+OpenAI SDK directly:
 
 | Provider | Models | Context |
 |----------|--------|---------|
 | Anthropic | Claude Opus 4/4.5/4.6, Sonnet 4, Haiku 4.5 | 200K |
 | OpenAI | GPT-4o, GPT-4-turbo, GPT-4o-mini | 128K |
-| Google | Gemini 2.0-flash, Gemini 2.5-pro | 1M |
-| Meta | Llama 3.3 70B | 131K |
-| DeepSeek | DeepSeek Chat v3 | 65K |
-| Qwen | Qwen 2.5 72B, Qwen3-coder, Qwen3.5 variants | 32–262K |
-| Local | Qwen3.5-9B via MLX-VLM | 32K |
-| Any | litellm-compatible endpoint | Auto-probed |
+| OpenRouter | All gateway models | varies |
+| Local | rvLLM / vLLM / MLX-VLM via OPENAI_BASE_URL | varies |
+| Any | OpenAI chat-completions–compatible endpoint | Auto-probed |
 
 Switch models at any time with `/model` or `--model`. Unknown models are probed at descending context tiers (2M → 1M → 512K → 200K → 128K → 64K → 32K).
 

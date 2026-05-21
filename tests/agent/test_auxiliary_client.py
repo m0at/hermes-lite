@@ -1,4 +1,4 @@
-"""Tests for agent.auxiliary_client — Anthropic-first with local fallback via litellm."""
+"""Tests for agent.auxiliary_client — Anthropic-first with local OpenAI-compatible fallback."""
 
 import os
 from unittest.mock import patch, MagicMock
@@ -9,7 +9,7 @@ from agent.auxiliary_client import (
     get_text_auxiliary_client,
     get_vision_auxiliary_client,
     auxiliary_max_tokens_param,
-    LitellmAuxiliaryClient,
+    AuxiliaryClient,
 )
 
 
@@ -25,10 +25,10 @@ def _clean_env(monkeypatch):
 
 
 class TestGetTextAuxiliaryClient:
-    def test_anthropic_key_returns_litellm_client(self, monkeypatch):
+    def test_anthropic_key_returns_aux_client(self, monkeypatch):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
         client, model = get_text_auxiliary_client()
-        assert isinstance(client, LitellmAuxiliaryClient)
+        assert isinstance(client, AuxiliaryClient)
         assert model == "claude-haiku-4-5"
 
     def test_anthropic_key_respects_aux_model_override(self, monkeypatch):
@@ -41,7 +41,7 @@ class TestGetTextAuxiliaryClient:
         monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:8800/v1")
         monkeypatch.setenv("OPENAI_API_KEY", "local")
         client, model = get_text_auxiliary_client()
-        assert isinstance(client, LitellmAuxiliaryClient)
+        assert isinstance(client, AuxiliaryClient)
         assert "qwen" in model
 
     def test_returns_none_when_nothing_available(self):

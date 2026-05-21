@@ -11,10 +11,11 @@ requires-python = ">=3.11"
 authors = [{ name = "Andy / Hermes Lite" }]
 license = { text = "MIT" }
 dependencies = [
+  "anthropic>=0.78",
   "fire",
   "httpx",
   "jinja2",
-  "litellm>=1.75.5",
+  "openai>=2.0",
   "platformdirs",
   "prompt_toolkit",
   "pydantic>=2.0",

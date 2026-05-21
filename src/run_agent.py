@@ -25,9 +25,6 @@ import hashlib
 import json
 import logging
 logger = logging.getLogger(__name__)
-# Suppress litellm's verbose debug/info spam
-logging.getLogger("LiteLLM").setLevel(logging.WARNING)
-logging.getLogger("litellm").setLevel(logging.WARNING)
 import os
 import random
 import re
@@ -476,7 +473,7 @@ class AIAgent:
                 ]:
                     logging.getLogger(quiet_logger).setLevel(logging.ERROR)
         
-        # API credentials for litellm
+        # API credentials for the LLM client.
         if api_key:
             self.api_key = api_key
         else:
@@ -2034,123 +2031,44 @@ class AIAgent:
         return any(lower.startswith(p) for p in planning_phrases)
 
     def _chat_completion(self, **kwargs):
-        """Route chat completion through litellm with streaming.
+        """Run a chat completion via agent.llm_client (Anthropic SDK for Claude,
+        OpenAI SDK for OpenAI-compatible endpoints).
 
-        When streaming is possible (quiet_mode + display active), tokens are
-        printed as they arrive so the user sees incremental output instead of
-        waiting for the full response.  The accumulated chunks are reassembled
-        into a standard ModelResponse so callers don't need to change.
+        Streams tokens to the TUI/stderr when a display is attached. Returns a
+        SimpleNamespace shaped like an OpenAI ChatCompletion so callers don't
+        branch on transport.
         """
-        import litellm
-        litellm.drop_params = True
-        litellm.modify_params = True
-        litellm.suppress_debug_info = True
-        kwargs.pop("extra_body", None)
+        from agent.llm_client import completion as _completion
 
         # Stream when we have a display or in subprocess mode (TUI).
         # Auxiliary calls (compression summaries etc.) pass _skip_stream=True.
         skip = kwargs.pop("_skip_stream", False)
         use_stream = (self._show_display or self._subprocess_mode) and not skip
-        if not use_stream:
-            return litellm.completion(**kwargs)
 
-        kwargs["stream"] = True
-        kwargs["stream_options"] = {"include_usage": True}
-        stream = litellm.completion(**kwargs)
+        # Wire streaming callbacks into the TUI / stderr.
+        if use_stream:
+            protocol = self._protocol
+            subprocess_mode = self._subprocess_mode
+            show_display = self._show_display
 
-        # Accumulate streamed chunks into a full response
-        collected_content = []
-        collected_tool_calls = {}  # index -> {id, function_name, arguments}
-        finish_reason = None
-        role = "assistant"
-        usage = None
-        model_name = None
-
-        for chunk in stream:
-            if not chunk.choices:
-                # Final chunk often carries only usage
-                if hasattr(chunk, "usage") and chunk.usage:
-                    usage = chunk.usage
-                if hasattr(chunk, "model") and chunk.model:
-                    model_name = chunk.model
-                continue
-
-            delta = chunk.choices[0].delta
-            if chunk.choices[0].finish_reason:
-                finish_reason = chunk.choices[0].finish_reason
-            if hasattr(chunk, "model") and chunk.model:
-                model_name = chunk.model
-            if hasattr(chunk, "usage") and chunk.usage:
-                usage = chunk.usage
-
-            # Content token
-            if delta.content:
-                collected_content.append(delta.content)
-                # Emit token to subprocess protocol or print to stderr
-                if self._subprocess_mode and self._protocol:
-                    self._protocol.emit_token(delta.content, is_thinking=False)
-                elif self._show_display:
-                    sys.stderr.write(delta.content)
+            def _on_text(token: str):
+                if subprocess_mode and protocol:
+                    protocol.emit_token(token, is_thinking=False)
+                elif show_display:
+                    sys.stderr.write(token)
                     sys.stderr.flush()
 
-            # Streaming tool calls arrive as indexed deltas
-            if delta.tool_calls:
-                for tc_delta in delta.tool_calls:
-                    idx = tc_delta.index if hasattr(tc_delta, "index") else 0
-                    if idx not in collected_tool_calls:
-                        collected_tool_calls[idx] = {
-                            "id": "", "type": "function",
-                            "function": {"name": "", "arguments": ""},
-                        }
-                    entry = collected_tool_calls[idx]
-                    if hasattr(tc_delta, "id") and tc_delta.id:
-                        entry["id"] = tc_delta.id
-                    if hasattr(tc_delta, "function") and tc_delta.function:
-                        if tc_delta.function.name:
-                            entry["function"]["name"] += tc_delta.function.name
-                        if tc_delta.function.arguments:
-                            entry["function"]["arguments"] += tc_delta.function.arguments
+            kwargs["on_text"] = _on_text
+            kwargs["stream"] = True
+
+        response = _completion(**kwargs)
 
         # End streaming line (not needed in subprocess mode — TUI handles display)
-        if collected_content and self._show_display and not self._subprocess_mode:
-            sys.stderr.write("\n")
-            sys.stderr.flush()
+        if use_stream and self._show_display and not self._subprocess_mode:
+            if response.choices and response.choices[0].message.content:
+                sys.stderr.write("\n")
+                sys.stderr.flush()
 
-        # Reassemble into a litellm ModelResponse-compatible object
-        full_content = "".join(collected_content) or None
-        tool_calls_list = None
-        if collected_tool_calls:
-            tool_calls_list = []
-            for idx in sorted(collected_tool_calls):
-                tc = collected_tool_calls[idx]
-                tool_calls_list.append(SimpleNamespace(
-                    id=tc["id"],
-                    type=tc["type"],
-                    function=SimpleNamespace(
-                        name=tc["function"]["name"],
-                        arguments=tc["function"]["arguments"],
-                    ),
-                ))
-
-        message = SimpleNamespace(
-            role=role,
-            content=full_content,
-            tool_calls=tool_calls_list,
-            function_call=None,
-        )
-        # Copy any extra attributes providers may attach (reasoning, etc.)
-        # Not present in streamed chunks, so leave as defaults.
-
-        choice = SimpleNamespace(
-            index=0,
-            message=message,
-            finish_reason=finish_reason or "stop",
-        )
-        response = SimpleNamespace(
-            choices=[choice],
-            usage=usage,
-            model=model_name or kwargs.get("model", ""),
-        )
         return response
 
     def _apply_qwen_params(self, kwargs: dict) -> dict:

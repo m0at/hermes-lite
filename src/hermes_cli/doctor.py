@@ -49,7 +49,7 @@ def run_doctor(_args):
     print(color("◆ Packages", Colors.CYAN, Colors.BOLD))
     for module, label in [
         ("openai", "OpenAI SDK"),
-        ("litellm", "LiteLLM"),
+        ("anthropic", "Anthropic SDK"),
         ("rich", "Rich"),
         ("prompt_toolkit", "prompt_toolkit"),
         ("yaml", "PyYAML"),
